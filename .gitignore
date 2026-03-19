@@ -1,0 +1,77 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+bin/
+obj/
+
+# Visual Studio cache & temp files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VS Code (optional)
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# NuGet packages
+*.nupkg
+packages/
+!packages/build/
+*.nuget.props
+*.nuget.targets
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Publish output
+publish/
+
+# Azure
+*.azurePubxml
+
+# Resharper
+_ReSharper*/
+*.DotSettings.user
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+
+# Windows files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Mac (falls vorhanden)
+.DS_Store
+
+# Backup & temp files
+*.bak
+*.tmp
+*.temp
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+
+# SQL Server files
+*.mdf
+*.ldf
+
+# IIS Express
+.vsconfig
