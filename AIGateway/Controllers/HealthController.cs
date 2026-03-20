@@ -1,4 +1,5 @@
 ﻿using AiGateway.Api.Models.Responses;
+using AiGateway.Api.Models.Responses;
 using AiGateway.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,11 +11,16 @@ public class HealthController : ControllerBase
 {
     private readonly ILmStudioClient _lmStudio;
     private readonly IQueueService _queue;
+    private readonly MemoryDiagnosticsService _memoryDiagnostics;
 
-    public HealthController(ILmStudioClient lmStudio, IQueueService queue)
+    public HealthController(
+        ILmStudioClient lmStudio, 
+        IQueueService queue,
+        MemoryDiagnosticsService memoryDiagnostics)
     {
         _lmStudio = lmStudio;
         _queue = queue;
+        _memoryDiagnostics = memoryDiagnostics;
     }
 
     /// <summary>
@@ -45,4 +51,22 @@ public class HealthController : ControllerBase
 
         return isReachable ? Ok(health) : StatusCode(503, health);
     }
+
+    /// <summary>
+    /// Memory Diagnostics - Detaillierte Speicher-Informationen
+    /// GET /api/health/memory
+    /// </summary>
+    [HttpGet("memory")]
+    public IActionResult GetMemory([FromQuery] bool snapshot = false)
+    {
+        if (snapshot)
+        {
+            // Schreibe Snapshot in Datei
+            _memoryDiagnostics.WriteMemorySnapshot("Manual Health Check");
+        }
+
+        var memoryInfo = _memoryDiagnostics.GetMemoryInfo();
+        return Ok(memoryInfo);
+    }
 }
+

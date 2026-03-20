@@ -26,10 +26,13 @@ public class ApiKeyMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var path = context.Request.Path.Value?.ToLower() ?? "";
+        var method = context.Request.Method;
+        var ip = context.Connection.RemoteIpAddress;
 
         // Health-Endpoint ohne Key erreichbar
         if (path.Contains("/api/health"))
         {
+            _logger.LogTrace("Health-Check von {IP} - Auth übersprungen", ip);
             await _next(context);
             return;
         }
@@ -37,21 +40,28 @@ public class ApiKeyMiddleware
         // API-Key prüfen
         if (!context.Request.Headers.TryGetValue("X-Api-Key", out var providedKey))
         {
-            _logger.LogWarning("Request ohne API-Key von {IP}",
-                context.Connection.RemoteIpAddress);
+            _logger.LogWarning("❌ Auth fehlgeschlagen: Kein API-Key | {Method} {Path} | IP: {IP}",
+                method, path, ip);
             context.Response.StatusCode = 401;
             await context.Response.WriteAsJsonAsync(new { error = "API-Key fehlt (Header: X-Api-Key)" });
             return;
         }
 
+        var keyPreview = providedKey.ToString().Length >= 4 
+            ? providedKey.ToString()[..4] + "***" 
+            : "***";
+
         if (!_options.ApiKeys.Contains(providedKey.ToString()))
         {
-            _logger.LogWarning("Ungültiger API-Key von {IP}: {Key}",
-                context.Connection.RemoteIpAddress, providedKey.ToString()[..4] + "...");
+            _logger.LogWarning("❌ Auth fehlgeschlagen: Ungültiger Key {KeyPreview} | {Method} {Path} | IP: {IP}",
+                keyPreview, method, path, ip);
             context.Response.StatusCode = 403;
-            await context.Response.WriteAsJsonAsync(new { error = "Ungültiger API-Key " });
+            await context.Response.WriteAsJsonAsync(new { error = "Ungültiger API-Key" });
             return;
         }
+
+        _logger.LogDebug("✅ Auth erfolgreich: {KeyPreview} | {Method} {Path}", 
+            keyPreview, method, path);
 
         await _next(context);
     }
