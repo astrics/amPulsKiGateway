@@ -27,6 +27,7 @@ builder.Services.AddSingleton<IChunkService, ChunkService>();
 builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
 builder.Services.AddSingleton<ICacheService, CacheService>();
 builder.Services.AddSingleton<MemoryDiagnosticsService>();
+builder.Services.AddSingleton<IJobPersistenceService, JobPersistenceService>();
 
 // HttpClient für LM Studio
 builder.Services.AddHttpClient<ILmStudioClient, LmStudioClient>();

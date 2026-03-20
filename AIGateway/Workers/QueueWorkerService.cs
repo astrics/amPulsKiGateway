@@ -6,25 +6,23 @@ using Microsoft.Extensions.Options;
 
 namespace AiGateway.Api.Workers;
 
-/// <summary>
-/// Hintergrund-Dienst der die Queue abarbeitet.
-/// Läuft solange die Applikation läuft.
-/// </summary>
 public class QueueWorkerService : BackgroundService
 {
     private readonly QueueService _queue;
     private readonly ILmStudioClient _lmStudio;
     private readonly IPromptBuilder _promptBuilder;
     private readonly ICacheService _cache;
+    private readonly IJobPersistenceService _persistence;
     private readonly SemaphoreSlim _semaphore;
     private readonly ILogger<QueueWorkerService> _logger;
     private readonly GatewayOptions _options;
 
     public QueueWorkerService(
-        QueueService queue, // Konkrete Klasse für Channel-Zugriff
+        QueueService queue,
         ILmStudioClient lmStudio,
         IPromptBuilder promptBuilder,
         ICacheService cache,
+        IJobPersistenceService persistence,
         IOptions<GatewayOptions> options,
         ILogger<QueueWorkerService> logger)
     {
@@ -32,6 +30,7 @@ public class QueueWorkerService : BackgroundService
         _lmStudio = lmStudio;
         _promptBuilder = promptBuilder;
         _cache = cache;
+        _persistence = persistence;
         _options = options.Value;
         _logger = logger;
         _semaphore = new SemaphoreSlim(_options.MaxConcurrency);
@@ -43,7 +42,7 @@ public class QueueWorkerService : BackgroundService
             "Queue Worker gestartet. Max Concurrency: {Concurrency}",
             _options.MaxConcurrency);
 
-        // Cleanup-Timer: alle 30 Minuten alte Jobs entfernen
+        // Cleanup-Timer
         _ = Task.Run(async () =>
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -53,12 +52,11 @@ public class QueueWorkerService : BackgroundService
             }
         }, stoppingToken);
 
-        // Hauptschleife: Items aus dem Channel lesen
+        // Hauptschleife
         await foreach (var item in _queue.Reader.ReadAllAsync(stoppingToken))
         {
             await _semaphore.WaitAsync(stoppingToken);
 
-            // Verarbeitung in eigenem Task (für Concurrency > 1)
             _ = Task.Run(async () =>
             {
                 try
@@ -71,6 +69,9 @@ public class QueueWorkerService : BackgroundService
                     item.Status = "failed";
                     item.Error = ex.Message;
                     item.CompletedAt = DateTime.UtcNow;
+
+                    // ─── Fehler persistieren ───
+                    await _persistence.SaveJobAsync(item.JobId, item);
                 }
                 finally
                 {
@@ -83,6 +84,10 @@ public class QueueWorkerService : BackgroundService
     private async Task ProcessItemAsync(QueueItem item, CancellationToken ct)
     {
         item.Status = "processing";
+
+        // ─── Status "processing" persistieren ───
+        await _persistence.SaveJobAsync(item.JobId, item);
+
         _logger.LogInformation("Job {JobId} wird verarbeitet. {Chunks} Chunks.",
             item.JobId, item.Chunks.Count);
 
@@ -95,7 +100,6 @@ public class QueueWorkerService : BackgroundService
             var userPrompt = _promptBuilder.BuildUserPrompt(
                 item.AnalysisType, chunk, item.CustomPrompt);
 
-            // Cache prüfen
             var cacheKey = _cache.GenerateKey(item.AnalysisType, userPrompt);
             var cached = await _cache.GetAsync(cacheKey);
 
@@ -108,10 +112,7 @@ public class QueueWorkerService : BackgroundService
             }
             else
             {
-                // LM Studio aufrufen
                 result = await _lmStudio.ChatCompleteAsync(systemPrompt, userPrompt, ct);
-
-                // Ergebnis cachen
                 await _cache.SetAsync(cacheKey, result);
             }
 
@@ -121,34 +122,34 @@ public class QueueWorkerService : BackgroundService
             _logger.LogInformation(
                 "Job {JobId}: Chunk {Completed}/{Total} fertig",
                 item.JobId, item.CompletedChunks, item.Chunks.Count);
+
+            // ─── Nach jedem Chunk persistieren ───
+            await _persistence.SaveJobAsync(item.JobId, item);
         }
 
-        // Alle Chunks fertig → Ergebnisse aggregieren
+        // Alle Chunks fertig
         item.FinalResult = AggregateResults(item.ChunkResults, item.AnalysisType);
         item.Status = "completed";
         item.CompletedAt = DateTime.UtcNow;
         _queue.MarkCompleted(item.JobId);
 
+        // ─── Finales Ergebnis persistieren ───
+        await _persistence.SaveJobAsync(item.JobId, item);
+
         _logger.LogInformation(
             "Job {JobId} abgeschlossen in {Duration:F1}s",
             item.JobId, (item.CompletedAt.Value - item.CreatedAt).TotalSeconds);
 
-        // Webhook senden falls konfiguriert
         if (!string.IsNullOrEmpty(item.CallbackUrl))
         {
             await SendWebhookAsync(item);
         }
     }
 
-    /// <summary>
-    /// Fasst die Ergebnisse aller Chunks zusammen.
-    /// Bei "results"-Arrays werden sie zusammengeführt.
-    /// </summary>
     private object AggregateResults(List<string> chunkResults, string analysisType)
     {
         if (chunkResults.Count == 1)
         {
-            // Nur ein Chunk → direkt zurückgeben
             try
             {
                 return JsonSerializer.Deserialize<object>(chunkResults[0])!;
@@ -159,7 +160,6 @@ public class QueueWorkerService : BackgroundService
             }
         }
 
-        // Mehrere Chunks → "results"-Arrays zusammenführen
         var allResults = new List<JsonElement>();
 
         foreach (var chunkResult in chunkResults)
@@ -178,14 +178,12 @@ public class QueueWorkerService : BackgroundService
                 }
                 else
                 {
-                    // Kein "results"-Array → ganzes Objekt hinzufügen
                     allResults.Add(doc.RootElement.Clone());
                 }
             }
             catch (JsonException ex)
             {
                 _logger.LogWarning("Chunk-Ergebnis ist kein valides JSON: {Error}", ex.Message);
-                // Raw-Text als Fallback
             }
         }
 

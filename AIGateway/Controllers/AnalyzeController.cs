@@ -12,15 +12,18 @@ public class AnalyzeController : ControllerBase
 {
     private readonly IQueueService _queue;
     private readonly IChunkService _chunker;
+    private readonly IJobPersistenceService _persistence;
     private readonly ILogger<AnalyzeController> _logger;
 
     public AnalyzeController(
         IQueueService queue,
         IChunkService chunker,
+        IJobPersistenceService persistence,
         ILogger<AnalyzeController> logger)
     {
         _queue = queue;
         _chunker = chunker;
+        _persistence = persistence;
         _logger = logger;
     }
 
@@ -31,21 +34,14 @@ public class AnalyzeController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Submit([FromBody] AnalysisRequest request)
     {
-        // Validierung
         if (request.Statements == null || !request.Statements.Any())
-        {
             return BadRequest(new { error = "Keine Aussagen übergeben ('statements' ist leer)" });
-        }
 
         if (request.Statements.Count > 1000)
-        {
             return BadRequest(new { error = "Maximal 1000 Aussagen pro Request" });
-        }
 
-        // Chunking
         var chunks = _chunker.Split(request.Statements);
 
-        // QueueItem erstellen
         var item = new QueueItem
         {
             Source = request.Source,
@@ -57,10 +53,14 @@ public class AnalyzeController : ControllerBase
             TotalStatements = request.Statements.Count
         };
 
-        // In Queue einreihen
         var queued = await _queue.EnqueueAsync(item);
 
-        // Sofort Accepted zurückgeben
+        // ─── Sofort auf Disk persistieren ───
+        await _persistence.SaveJobAsync(queued.JobId, queued);
+
+        _logger.LogInformation("💾 Job {JobId} persisted (queued, {Chunks} Chunks, {Statements} Aussagen)",
+            queued.JobId, chunks.Count, request.Statements.Count);
+
         return Accepted(new JobStatusResponse
         {
             JobId = queued.JobId,
@@ -82,12 +82,35 @@ public class AnalyzeController : ControllerBase
     [HttpGet("status/{jobId}")]
     public async Task<IActionResult> GetStatus(string jobId)
     {
+        // 1. RAM (schnell)
         var status = await _queue.GetStatusAsync(jobId);
+        if (status != null)
+            return Ok(status);
 
-        if (status == null)
-            return NotFound(new { error = $"Job '{jobId}' nicht gefunden" });
+        // 2. Disk-Fallback (nach Neustart)
+        var diskJob = await _persistence.LoadJobAsync(jobId);
+        if (diskJob != null)
+        {
+            _logger.LogInformation("📂 Job {JobId} von Disk geladen (Status: {Status})",
+                jobId, diskJob.Status);
 
-        return Ok(status);
+            return Ok(new JobStatusResponse
+            {
+                JobId = diskJob.JobId,
+                Status = diskJob.Status,
+                TotalChunks = diskJob.Chunks?.Count ?? 0,
+                CompletedChunks = diskJob.CompletedChunks,
+                Source = diskJob.Source,
+                AnalysisType = diskJob.AnalysisType,
+                TotalStatements = diskJob.TotalStatements,
+                CreatedAt = diskJob.CreatedAt,
+                CompletedAt = diskJob.CompletedAt,
+                Result = diskJob.FinalResult,
+                Error = diskJob.Error
+            });
+        }
+
+        return NotFound(new { error = $"Job '{jobId}' nicht gefunden" });
     }
 
     /// <summary>
@@ -98,9 +121,8 @@ public class AnalyzeController : ControllerBase
     public IActionResult GetAllJobs()
     {
         if (_queue is QueueService qs)
-        {
             return Ok(qs.GetAllJobs());
-        }
+
         return Ok(new List<JobStatusResponse>());
     }
 }
