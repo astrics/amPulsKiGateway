@@ -10,16 +10,13 @@ namespace AiGateway.Api.Controllers;
 public class HealthController : ControllerBase
 {
     private readonly ILmStudioClient _lmStudio;
-    private readonly IQueueService _queue;
     private readonly MemoryDiagnosticsService _memoryDiagnostics;
 
     public HealthController(
         ILmStudioClient lmStudio, 
-        IQueueService queue,
         MemoryDiagnosticsService memoryDiagnostics)
     {
         _lmStudio = lmStudio;
-        _queue = queue;
         _memoryDiagnostics = memoryDiagnostics;
     }
 
@@ -40,13 +37,7 @@ public class HealthController : ControllerBase
                 IsReachable = isReachable,
                 ModelLoaded = modelName,
                 ResponseTimeMs = responseTimeMs
-            },
-            Queue = new QueueHealth
-            {
-                PendingJobs = _queue.GetPendingCount(),
-                ActiveJobs = _queue.GetActiveCount(),
-                CompletedJobsTotal = _queue.GetCompletedTotal()
-            }
+            }            
         };
 
         return isReachable ? Ok(health) : StatusCode(503, health);

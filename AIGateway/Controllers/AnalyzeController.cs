@@ -1,128 +1,55 @@
-﻿using AiGateway.Api.Models.Internal;
-using AiGateway.Api.Models.Requests;
-using AiGateway.Api.Models.Responses;
+﻿using Microsoft.AspNetCore.Mvc;
 using AiGateway.Api.Services;
-using Microsoft.AspNetCore.Mvc;
+using AiGateway.Api.Models.Requests;
 
 namespace AiGateway.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/analyze")]
 public class AnalyzeController : ControllerBase
 {
-    private readonly IQueueService _queue;
-    private readonly IChunkService _chunker;
-    private readonly IJobPersistenceService _persistence;
+    private readonly BatchJobProcessor _processor;
+    private readonly JobStore _jobStore;
     private readonly ILogger<AnalyzeController> _logger;
 
-    public AnalyzeController(
-        IQueueService queue,
-        IChunkService chunker,
-        IJobPersistenceService persistence,
-        ILogger<AnalyzeController> logger)
+    public AnalyzeController(BatchJobProcessor processor, JobStore jobStore, ILogger<AnalyzeController> logger)
     {
-        _queue = queue;
-        _chunker = chunker;
-        _persistence = persistence;
+        _processor = processor;
+        _jobStore = jobStore;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Neue Analyse einreichen
-    /// POST /api/analyze
-    /// </summary>
     [HttpPost]
-    public async Task<IActionResult> Submit([FromBody] AnalysisRequest request)
+    public IActionResult StartAnalysis([FromBody] AnalyzeRequest request)
     {
-        if (request.Statements == null || !request.Statements.Any())
-            return BadRequest(new { error = "Keine Aussagen übergeben ('statements' ist leer)" });
+        if (request.Statements == null || request.Statements.Count == 0)
+            return BadRequest(new { status = "error", message = "Keine Statements übergeben" });
 
-        if (request.Statements.Count > 1000)
-            return BadRequest(new { error = "Maximal 1000 Aussagen pro Request" });
+        var jobId = $"job_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..8]}";
+        var dashboard = request.Dashboard ?? "Unbekannt";
 
-        var chunks = _chunker.Split(request.Statements);
-
-        var item = new QueueItem
+        var statements = request.Statements.Select(s => new StatementInput
         {
-            Source = request.Source,
-            AnalysisType = request.AnalysisType,
-            Priority = Math.Clamp(request.Priority, 1, 10),
-            CustomPrompt = request.CustomPrompt,
-            CallbackUrl = request.CallbackUrl,
-            Chunks = chunks,
-            TotalStatements = request.Statements.Count
-        };
+            StatementId = s.StatementId ?? "",
+            MetadatenId = s.MetadatenId ?? "",
+            Text = s.Text
+        }).ToList();
 
-        var queued = await _queue.EnqueueAsync(item);
+        // Job registrieren
+        _jobStore.CreateJob(jobId, dashboard, statements.Count);
 
-        // ─── Sofort auf Disk persistieren ───
-        await _persistence.SaveJobAsync(queued.JobId, queued);
+        // Verarbeitung starten
+        _processor.StartJob(jobId, dashboard, statements);
 
-        _logger.LogInformation("💾 Job {JobId} persisted (queued, {Chunks} Chunks, {Statements} Aussagen)",
-            queued.JobId, chunks.Count, request.Statements.Count);
+        _logger.LogInformation("Job {JobId} gestartet: {Count} Statements für {Dashboard}",
+            jobId, statements.Count, dashboard);
 
-        return Accepted(new JobStatusResponse
+        return Accepted(new
         {
-            JobId = queued.JobId,
-            Status = "queued",
-            QueuePosition = _queue.GetPendingCount(),
-            TotalChunks = chunks.Count,
-            CompletedChunks = 0,
-            Source = request.Source,
-            AnalysisType = request.AnalysisType,
-            TotalStatements = request.Statements.Count,
-            CreatedAt = queued.CreatedAt
+            job_id = jobId,
+            status = "accepted",
+            total_statements = statements.Count,
+            dashboard
         });
-    }
-
-    /// <summary>
-    /// Job-Status abfragen
-    /// GET /api/analyze/status/{jobId}
-    /// </summary>
-    [HttpGet("status/{jobId}")]
-    public async Task<IActionResult> GetStatus(string jobId)
-    {
-        // 1. RAM (schnell)
-        var status = await _queue.GetStatusAsync(jobId);
-        if (status != null)
-            return Ok(status);
-
-        // 2. Disk-Fallback (nach Neustart)
-        var diskJob = await _persistence.LoadJobAsync(jobId);
-        if (diskJob != null)
-        {
-            _logger.LogInformation("📂 Job {JobId} von Disk geladen (Status: {Status})",
-                jobId, diskJob.Status);
-
-            return Ok(new JobStatusResponse
-            {
-                JobId = diskJob.JobId,
-                Status = diskJob.Status,
-                TotalChunks = diskJob.Chunks?.Count ?? 0,
-                CompletedChunks = diskJob.CompletedChunks,
-                Source = diskJob.Source,
-                AnalysisType = diskJob.AnalysisType,
-                TotalStatements = diskJob.TotalStatements,
-                CreatedAt = diskJob.CreatedAt,
-                CompletedAt = diskJob.CompletedAt,
-                Result = diskJob.FinalResult,
-                Error = diskJob.Error
-            });
-        }
-
-        return NotFound(new { error = $"Job '{jobId}' nicht gefunden" });
-    }
-
-    /// <summary>
-    /// Alle Jobs auflisten
-    /// GET /api/analyze/jobs
-    /// </summary>
-    [HttpGet("jobs")]
-    public IActionResult GetAllJobs()
-    {
-        if (_queue is QueueService qs)
-            return Ok(qs.GetAllJobs());
-
-        return Ok(new List<JobStatusResponse>());
     }
 }

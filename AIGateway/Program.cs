@@ -1,7 +1,6 @@
 ﻿using AiGateway.Api.Configuration;
 using AiGateway.Api.Middleware;
 using AiGateway.Api.Services;
-using AiGateway.Api.Workers;
 using Serilog;
 using System.Runtime;
 
@@ -14,23 +13,26 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+
+// Services
+builder.Services.AddSingleton<JobStore>();
+builder.Services.AddHttpClient<LmStudioClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(300);
+});
+builder.Services.AddSingleton<BatchJobProcessor>();
+builder.Services.AddSingleton<ResultFileWriter>();
+
 // ── Configuration ──────────────────────────────────
 builder.Services.Configure<GatewayOptions>(
     builder.Configuration.GetSection(GatewayOptions.SectionName));
 
 // ── Services registrieren ──────────────────────────
 // Queue als Singleton (muss über gesamte App-Laufzeit bestehen)
-builder.Services.AddSingleton<QueueService>();
-builder.Services.AddSingleton<IQueueService>(sp => sp.GetRequiredService<QueueService>());
 
-builder.Services.AddSingleton<IChunkService, ChunkService>();
-builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
-builder.Services.AddSingleton<ICacheService, CacheService>();
 builder.Services.AddSingleton<MemoryDiagnosticsService>();
-builder.Services.AddSingleton<IJobPersistenceService, JobPersistenceService>();
-
-// HttpClient für LM Studio
-builder.Services.AddHttpClient<ILmStudioClient, LmStudioClient>();
 
 // Memory Cache - ANGEPASST: CompactionPercentage hinzugefügt
 builder.Services.AddMemoryCache(options =>
@@ -40,8 +42,6 @@ builder.Services.AddMemoryCache(options =>
     options.ExpirationScanFrequency = TimeSpan.FromMinutes(5); // Alle 5min aufräumen
 });
 
-// Background Worker
-builder.Services.AddHostedService<QueueWorkerService>();
 
 // ── ASP.NET Core ───────────────────────────────────
 builder.Services.AddControllers()
