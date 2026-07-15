@@ -1,0 +1,27 @@
+{
+  "project": "Projekt B",
+  "description": "Startdatei fuer das zweite Projekt. Die Codebook-Datei ist noch nicht in den Prompt verdrahtet.",
+  "version": "0.1.0",
+  "labels": [
+    {
+      "number": 1,
+      "codeGroup": "Mitarbeiter",
+      "code": "Motivation & Engagement / Eingehen auf den Kunden",
+      "examples": [
+        "Der Mitarbeiter war sehr bemueht und hilfsbereit.",
+        "Die Beratung war geduldig und ist auf meine Beduerfnisse eingegangen."
+      ],
+      "codingRule": "Aussagen ueber motiviertes, engagiertes, hilfsbereites oder individuell auf den Kunden eingehendes Verhalten."
+    },
+    {
+      "number": 2,
+      "codeGroup": "Mitarbeiter",
+      "code": "Vertrauenswuerdig / Glaubwuerdig / Ehrlich / Einhalten von Versprechen",
+      "examples": [
+        "Der Mitarbeiter hat offen auch Nachteile angesprochen.",
+        "Die Unterlagen kamen wie am Telefon versprochen an."
+      ],
+      "codingRule": "Aussagen ueber ehrliches, offenes, verlaessliches und verbindliches Verhalten des Mitarbeiters."
+    }
+  ]
+}

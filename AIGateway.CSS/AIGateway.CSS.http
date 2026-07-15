@@ -1,0 +1,24 @@
+﻿@AIGatewayProjectB_HostAddress = http://localhost:5001
+
+GET {{AIGatewayProjectB_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+POST {{AIGatewayProjectB_HostAddress}}/api/analyze
+X-Api-Key: css-dev-key
+Content-Type: application/json
+
+{
+  "dashboard": "Projekt B",
+  "statements": [
+    {
+      "statementId": "1",
+      "metadatenId": "demo-1",
+      "text": "Der Mitarbeiter hat sich viel Zeit genommen und war sehr hilfsbereit."
+    }
+  ]
+}
+
+###
+

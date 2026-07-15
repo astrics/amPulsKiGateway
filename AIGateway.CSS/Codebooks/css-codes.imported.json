@@ -1,0 +1,254 @@
+{
+  "project": "CSS",
+  "sourceDocument": "C:\\Users\\ls\\Nextcloud\\astrics\\myfeedback\\AmPuls\\KI\\Codeliste.docx",
+  "description": "Import der Codeliste aus Word. Laufzeitseitig sollte kuenftig diese strukturierte Datei genutzt werden.",
+  "version": "1.0.0",
+  "labelCount": 35,
+  "labels": [
+    {
+      "number": 1,
+      "codeGroup": "Mitarbeiter",
+      "code": "Motivation & Engagement / Eingehen auf den Kunden",
+      "exampleText": "Der MA war sehr bemüht uns weiterzuhelfen; hilfsbereit, zuvorkommend, ist auf meine Bedürfnisse eingegangen; verständnisvoll, aufmerksam Der MA hat sich für mich Zeit genommen, hat mich ernstgenommen, hat mich nicht unter Druck gesetzt, „verfügbar“ =für mich da, loyal, kooperativ, enthusiastisch, kompatibel, vereinbar, Negativ: Fam. Mitglieder erhalten keine Auskunft, belächelt, Beratung war im Nachhinein nicht notwendig",
+      "codingRule": "Aussagen, welche sich auf ein motiviertes und/oder engagiertes Verhalten des Mitarbeiters beziehen / Hilfsbereitschaft /Extraengagement/-meile Aussagen, welche sich auf eine persönliche, individuelle Betreuung beziehen resp. wenn auf die persönlichen Bedürfnisse eingegangen wird. „ganz persönlich“ / spricht die Sprache des Kunden/ im Sinne des Kunden/ in Ruhe/ruhig erklärt, geduldig, verständnisvoll."
+    },
+    {
+      "number": 2,
+      "codeGroup": "Mitarbeiter",
+      "code": "Vertrauenswürdig / Glaubwürdig / Ehrlich / Einhalten von Versprechen",
+      "exampleText": "MA hat auch Nachteile offen angesprochen, entschuldigt sich. Fair, Offenheit, Sachlichkeit, seriös, nicht aufdringlich, zuverlässig MA widersprechen sich (nicht) Die Unterlagen wurden mir so wie am Telefon versprochen zugestellt. Wollte nicht einfach Produkt verkaufen, aufdringlich",
+      "codingRule": "Aussagen, welche sich auf ein vertrauenswürdiges, glaubwürdiges, ehrliches und offenes Verhalten des Mitarbeiters beziehen (auch Offenheit gegenüber Nachteilen von Produkten; Aussagen zur Verbindlichkeit, Zuverlässigkeit, transparentes/nachvollziehbares Verhalten, (fehlende) Koordination / Kommunikation innerhalb der Krankenversicherung , loyal, offen, Rücksprache nehmen"
+    },
+    {
+      "number": 3,
+      "codeGroup": "Mitarbeiter",
+      "code": "Freundlichkeit / Höflichkeit",
+      "exampleText": "",
+      "codingRule": "Aussagen, welche den Mitarbeiter als freundlich, höflich, nett, sympathisch, liebenswert beschreiben"
+    },
+    {
+      "number": 4,
+      "codeGroup": "Mitarbeiter",
+      "code": "Kompetenz / Qualität der Lösung",
+      "exampleText": "Der Mitarbeiter war fachlich sehr kompetent; Akkurat/Adäquat = sorgfältig, wiederholte Fehler, treffend, aufschlussreich gute/präzise Antwort/Info/Auskunft/Erklärung wiederholte Fehler, zielführend, komplex, klare Info, gut/verständlich erklärt (auch sprachlich abhängig), professionell, konkret, scharfsinnig Der MA hat sofort verstanden um was es geht, schnelle Auffassung, souverän, aufschlussreich",
+      "codingRule": "Aussagen, welche ich auf die Kompetenz des Mitarbeiters beziehen resp. auf die Qualität der Lösung (fachliche Korrektheit -> muss nicht bedeuten, dass der Kunde damit einverstanden ist --> das wäre dann z.B. Leistungsübernahme), wertvolle Info Klarheit / Verständlichkeit / guter Ratschlag"
+    },
+    {
+      "number": 5,
+      "codeGroup": "Mitarbeiter",
+      "code": "Unkomplizierte Lösung",
+      "exampleText": "Es gab ein hin und her, sehr aufwändig / umständlich, alles in einem (nicht mehre Kanäle zum Kunden) Allg. Aussagen die von komplizierten Prozessen der Krankenversicherung handeln, Wechsel der Kommunikationswege (E-Mail / Brief) Aber: Sofort, speditiv = Code 15",
+      "codingRule": "Aussagen zur (un)komplizierten Lösung (muss vom Kunden explizit erwähnt werden) Abschluss war einfach, simpel, reibungslos, effizient, lösungsorientiert, zielführend Anliegen wurde unkompliziert behandelt."
+    },
+    {
+      "number": 6,
+      "codeGroup": "Prämien & Bezahlung",
+      "code": "Höhe der Prämien / Preisleistungsverhältnis / Prämienerhöhung",
+      "exampleText": "hohe Prämien; hohe Kosten, günstige Prämie, gutes Preisleistungsverhältnis, Kosten im Vergleich zu den Leistungen sind zu hoch, jedes Jahr steigende Prämien, nicht nachvollziehbare Prämienerhöhung. Entschädigung für gesundes Verhalten. Langjährige Kunden sollten belohnt werden.",
+      "codingRule": "Aussagen, welche sich auf die Höhe der Prämie beziehen, das Preisleistungsverhältnis, Prämienerhöhungen oder die Stabilität der Prämien. Auch Rabatte oder Bonus (für treue Kunden) gehören dazu."
+    },
+    {
+      "number": 7,
+      "codeGroup": "Prämien & Bezahlung",
+      "code": "Prämienrechnung / Zahlungsprozess (Frequenz, Zahlungsmöglichkeiten, E-Rechnung, IPV)",
+      "exampleText": "Allg. falsche Rechnung, egal ob Name oder Betrag oder z.B falsch adressiert (ich bin die Korrespondenzadresse). Schade, dass es keine E-Rechnung gibt. Ich erhalte auch Rechnungen über Kleinstbeträge, diese könnte man doch besser zusammenfassen und gesammelt schicken Zeitpunkt der Reg.",
+      "codingRule": "Aussagen zur Häufigkeit des Erhalts der Prämienrechnung / Aussagen zu den Zahlungsmöglichkeiten generell (z.B. auch E-Rechnung), Aussagen zu IPV (individuelle Prämienverbilligung), Subvention, Aussagen zur Zahlung von Kleinstbeträgen (nur wenn es um den Prozess dazu geht) NICHT hierher: Aussagen zur Dauer der Leistungsabrechnung (=Code 19), Aussagen zu Papierflut generell in Code 29 Aussagen, zur Verständlichkeit / Übersichtlichkeit oder Richtigkeit der Prämienrechnung."
+    },
+    {
+      "number": 8,
+      "codeGroup": "Prämien & Bezahlung",
+      "code": "Mahnung / Betreibung",
+      "exampleText": "",
+      "codingRule": "Aussagen, die sich auf eine Mahnung oder eine Betreibung beziehen, (fast) immer negativ"
+    },
+    {
+      "number": 9,
+      "codeGroup": "Produkt",
+      "code": "Verständlichkeit / Übersichtlichkeit / Qualität des Produktangebots",
+      "exampleText": "",
+      "codingRule": "Aussagen zur Verständlichkeit/Klarheit und Übersichtlichkeit des Produktangebots Aussagen zum Produkt, welche sich auf die Flexibilität / Individualität der Lösungsmöglichkeiten beziehen, welche die Produkte / Services betreffen, generelle Aussagen wie „gute Produkte“ etc."
+    },
+    {
+      "number": 10,
+      "codeGroup": "Produkt",
+      "code": "Leistungsumfang Prävention: Fitnessabo, Gesundheitskonto, Gesundheitsangebote",
+      "exampleText": "Fitness Abo wird nicht übernommen; mehr Prävention wäre schön; Gesundheitskonto, Yoga wird nicht übernommen, Gesundheitscoaches, Nennungen zu Gesundheits- oder Fitnessapps",
+      "codingRule": "Aussagen zum Leistungsumfang betreffend Prävention: Deckung Kosten Fitness, Gesundheitskonto, Yoga, etc. Alle Angebote rund um die jeweiligen Gesundheits- und Fitnessapps der jeweiligen Krankenversicherungen (ausser es handelt sich um technische Probleme / Usability etc. -->dafür Codes 24/25). Achtung: Alternativmedizin (z.B. TCM, Massage etc.) sowie Brille gehören in den Code 18"
+    },
+    {
+      "number": 11,
+      "codeGroup": "Produkt",
+      "code": "Aufnahmebedingungen (GD) / Einschränkungen",
+      "exampleText": "ich wurde abgelehnt, obwohl ich die Fragen beantwortet habe",
+      "codingRule": "Aussagen zur Gesundheitsdeklaration, zu den Aufnahmefragen/Gesundheitsfragen, zur Ablehnung oder Aufnahme in eine Zusatzversicherung, Produkteinschränkungen, Herabstufungen"
+    },
+    {
+      "number": 12,
+      "codeGroup": "Produkt",
+      "code": "Alternatives Versicherungsmodell / Regelverstoss (nur OKP)",
+      "exampleText": "ich finde es mühsam immer zuerst beim Hausarzt vorbeizugehen / immer zuerst Callmed, Telmed anzurufen / Ich muss die Kosten selber tragen weil ich nicht zuerst Callmed angerufen habe / Mir wurde ein Arzt zugeteilt der zu weit weg ist",
+      "codingRule": "Alle Aussagen zu alternativen Versicherungsmodellen (Callmed, Hausarztmodell, HMO, Apothekermodell) sowie Regelverstösse (bei Nichteinhalten der Versicherungsbedingungen)"
+    },
+    {
+      "number": 13,
+      "codeGroup": "Produkt",
+      "code": "Antrag / Offerte / Police",
+      "exampleText": "Angebot ist so, wie ich es mir vorgestellt habe. Die Offerte ist verständlich, Die Police ist nicht übersichtlich.",
+      "codingRule": "Aussagen zur Offerte/Angebot/Antrag/Police, welche sich auf die erfüllte oder nicht erfüllte Erwartung des Kunden beziehen, sowie die Verständlichkeit / Übersichtlichkeit / Vollständigkeit etc."
+    },
+    {
+      "number": 14,
+      "codeGroup": "Kundenbetreuung",
+      "code": "Erreichbarkeit (Wartezeiten, Weiterverbinden) / Öffnungszeiten / Servicezeiten",
+      "exampleText": "Warteschleife an der Hotline ist mühsam; Wartezeit ist lange; Stimme / Musik gefällt nicht / gefällt. Am Abend ist niemand erreichbar, die Büros schliessen zu früh",
+      "codingRule": "Aussagen zur Erreichbarkeit, den Wartezeiten, (kann auch neutral codiert werden) oftmaligem Weiterverbinden, Schwierigkeit die richtige Person zu erreichen, Aussagen zu den Öffnungszeiten in den Agenturen/ Geschäftsstellen resp. den Service-Zeiten (z.B. Hotline)"
+    },
+    {
+      "number": 15,
+      "codeGroup": "Kundenbetreuung",
+      "code": "Antwortzeit / Dauer bis zur Lösung des Anliegens / mehrmalige Kontaktaufnahme",
+      "exampleText": "Es hat sehr lange gedauert, bis mein Anliegen gelöst wurde; Ich musste mehrmals nachfragen, bis ich eine Antwort bekam, mein Anliegen wurde schnell, rasch, sofort erledigt, speditive Arbeitsweise, NICHT hier codiert werden Antworten welche sich um die Zeitdauer zur Leistungsabrechnung beziehen (es gibt einen eigenen Code 19)",
+      "codingRule": "Aussagen zur Zeitspanne bis zur Lösung des Anliegens / der Anfrage oder Aussagen betreffend einer mehrmaligen Kontaktaufnahme bis zur Lösung."
+    },
+    {
+      "number": 16,
+      "codeGroup": "Kundenbetreuung",
+      "code": "Persönliche Ansprechperson / Kontinuität in der Betreuung / Agentur vor Ort",
+      "exampleText": "Ich weiss nicht, wohin ich mich wenden kann; es gibt keine Telefonnummer von der Agentur; Kontaktpersonen sind unklar; nicht immer jemand anderes",
+      "codingRule": "Aussagen zum Vorhandensein oder Nicht-Vorhandensein einer persönlichen Ansprechperson, einer kontinuierlichen Betreuung, dem Vorhandensein/Nicht-Vorhandensein einer Agentur vor Ort"
+    },
+    {
+      "number": 17,
+      "codeGroup": "Kundenbetreuung",
+      "code": "Anliegen (noch) nicht oder nur teilweise gelöst",
+      "exampleText": "Oder im positiven Sinne: „meine Fragen wurden beantwortet“, „mein Anliegen wurde gelöst“, „ich habe auf alle Fragen eine Antwort erhalten“; mir wurde geholfen",
+      "codingRule": "Falls das Anliegen zum Zeitpunkt der Befragung noch nicht oder nicht vollständig gelöst wurde oder falls es gelöst wurde ohne eine Wertung"
+    },
+    {
+      "number": 18,
+      "codeGroup": "Leistungsbezug",
+      "code": "Leistungsübernahme (Nachvollziehbarkeit)",
+      "exampleText": "Es wurden Leistungen nicht übernommen, welche meiner Meinung nach bezahlt werden müssten Beitrag zur neuen Brille wurde (nicht) übernommen Sie zahlen immer alles, gute Leistungen",
+      "codingRule": "z.B. Medikament, Therapie wird übernommen / nicht übernommen) Aussagen zur Leistungsübernahme resp. Nicht-Übernahme und der Nachvollziehbarkeit warum diese übernommen/nicht übernommen wurden, Unfall"
+    },
+    {
+      "number": 19,
+      "codeGroup": "Leistungsbezug",
+      "code": "Dauer der Leistungsabwicklung / Dauer bis zur Rückerstattung",
+      "exampleText": "",
+      "codingRule": "Aussagen zur Zeitdauer bis zur Leistungsabwicklung resp. der Dauer bis zur Rückerstattung der Kosten"
+    },
+    {
+      "number": 20,
+      "codeGroup": "Leistungsbezug",
+      "code": "Übersichtlichkeit / Transparenz / Verständlichkeit / Klarheit der Leistungsabrechnung",
+      "exampleText": "Online Abrechnung lief gut, die Bearbeitung der Leistungsabrechnung ist einfach",
+      "codingRule": "Aussagen zur übersichtlichen Darstellung, Verständlichkeit, Transparenz in Bezug auf die Leistungsabrechnung Leistungsabwicklung (Dokument) /Rückerstattung, einfacher/schwieriger Prozess"
+    },
+    {
+      "number": 21,
+      "codeGroup": "Leistungsbezug",
+      "code": "Korrektheit der Leistungsabrechnung und -Abwicklung",
+      "exampleText": "Die erste Abrechnung war falsch, sie wurde von der Krankenversicherung korrigiert.",
+      "codingRule": "NUR Aussagen, aus denen eindeutig hervorgeht, dass die Leistungsabrechnung nicht korrekt war, dürfen hier zugeordnet werden: Falls es sich nur um die Wahrnehmung des Kunden handelt, im Zweifelsfall unter Code 18 \"Leistungsübernahme\" codieren. Reklamieren im Bezug Abrechnung"
+    },
+    {
+      "number": 22,
+      "codeGroup": "Leistungsbezug",
+      "code": "Arzt / Leistungserbringer / Therapeut / Medgate / Medi24",
+      "exampleText": "Ich bin mit Medi24 (nicht) zufrieden, Ich bin mit der Hotline für medizinische Beratung (nicht) zufrieden Ich war bei Medi24 lange in der Warteschleife Der Mitarbeiter bei Call Med war (un)freundlich Der Mitarbeiter bei Medi24 konnte mir (nicht) helfen Arzt hat Rechnung nicht geschickt und dann gab es Probleme",
+      "codingRule": "Aussagen, welche sich auf den Arzt / Medgate / Medi24 oder einen anderen Leistungserbringer beziehen Alle Aussagen, wo die Krankenversicherung nicht direkt betroffen ist, sondern der Leistungserbringer. Aussagen zur Verrechnungsart zwischen Kunden - Leistungserbringer – Krankenversicherung . Aussagen zum Versicherungsmodell / Regelverstössen unter Produkt-Code 12 codieren"
+    },
+    {
+      "number": 23,
+      "codeGroup": "Digital",
+      "code": "Homepage",
+      "exampleText": "",
+      "codingRule": "Aussagen zum Internetauftritt der Krankenversicherung, betrifft aber nicht das Portal oder andere Apps"
+    },
+    {
+      "number": 24,
+      "codeGroup": "Digital",
+      "code": "Usability (Übersichtlichkeit / Handhabung, Funktionen) Apps / Portal",
+      "exampleText": "z.B. Ich finde mich im Portal (nicht) gut zurecht; das Portal ist sehr logisch und übersichtlich aufgebaut, einfach (zu bedienen), es ist gut übersichtlich, es ist unkompliziert/praktisch, schnell/effizient (falls nicht auf ein Anliegen oder Leistungsabrechnung bezogen…). Rechnungen über Handy hochladen finde ich gut/schlecht, Das Einscannen von Rechnungen klappt hervorragend, Es dauert lange zum hochladen der Rechnungen, ich sehe meine eingescannten Rechnungen nicht. Ich finde das Portal super",
+      "codingRule": "Aussagen zu den Apps betreffend der Verständlichkeit, Übersichtlichkeit, Bedienbarkeit und Benutzerfreundlichkeit. Auch allgemeine Aussagen über diese Apps. Kunde spricht etwas an, das in der App nicht vorhanden ist / neue Ideen etc., Rechnungen: Scanning-Prozess / hochladen/rückfordern."
+    },
+    {
+      "number": 25,
+      "codeGroup": "Digital",
+      "code": "(Technische) Probleme Apps / Portal",
+      "exampleText": "z.B. ich konnte keine Dokumente hochladen, das Portal ist langsam / abgestürzt, Ich konnte mich nicht einloggen. Ich kann die Daten meiner Familienmitglieder nicht (mehr) sehen. Bei Active hat es die Punkte nicht gutgeschrieben.",
+      "codingRule": "Aussagen, welche sich auf technische Probleme mit den digitalen Angeboten beziehen (es schien nicht zu funktionieren, gesuchte Dokumente/Rechnungen waren nicht sichtbar, etc.). Berechtigungsprobleme (Der Kunde möchte weitere Personen auf der App, geht aber nicht)."
+    },
+    {
+      "number": 26,
+      "codeGroup": "Image",
+      "code": "Image der Krankenversicherung",
+      "exampleText": "ist seriös, vertrauenswürdig, grosse Versicherung, gut aufgehoben, sympathisch etc.",
+      "codingRule": "Bezieht sich immer auf die jeweilige Krankenversicherung und nicht auf die Mitarbeiter"
+    },
+    {
+      "number": 27,
+      "codeGroup": "Sonstiges",
+      "code": "Sonstiges",
+      "exampleText": "Diese Kategorie nur dann verwenden, wenn keine andere Zuordnung möglich ist und die Aussage in irgendeiner Form relevant sein könnte (sonst unbrauchbarer Kommentar)",
+      "codingRule": "Aussagen, welche keiner anderen Kategorie zuordenbar sind."
+    },
+    {
+      "number": 28,
+      "codeGroup": "Sonstiges",
+      "code": "Steuerauszug",
+      "exampleText": "",
+      "codingRule": "Alle Aussagen zum Steuerauszug"
+    },
+    {
+      "number": 29,
+      "codeGroup": "Sonstiges",
+      "code": "Verwaltung / Administration (Verwaltungskosten, Papierflut, kostenpflichtige Serviceline), Werbung/Werbekosten",
+      "exampleText": "Ich bekomme sehr viel Post von der Krankenversicherung. Es ist Papierverschwendung für jeden kleinen Betrag eine eigene Rechnung zu schicken, die Serviceline ist kostenpflichtig, Kunden Magazin",
+      "codingRule": "Aussagen zu Verwaltungskosten, Verwaltungsaufwand, Administration, Bürokratie"
+    },
+    {
+      "number": 30,
+      "codeGroup": "Sonstiges",
+      "code": "Krankenversicherungslandschaft generell",
+      "exampleText": "Krankenkassen sind generell nicht kundenfreundlich, Einheitskasse, Vergleichsdienste, k-tipp",
+      "codingRule": "Allgemeine Aussagen zu Krankenversicherungen ohne konkreten Bezug zur eigenen Krankenversicherung"
+    },
+    {
+      "number": 31,
+      "codeGroup": "Sonstiges",
+      "code": "Grosszügigkeit / Kulanz / Toleranz der Krankenversicherung",
+      "exampleText": "Die Krankenversicherung hat sich kulant verhalten, ein nicht ordentliches Geschenk",
+      "codingRule": "Aussagen, die sich auf ein grosszügiges oder (nicht) kulantes Verhalten der Krankenversicherung beziehen, wenn explizit erwähnt wird, dass die Krankenversicherung allgemein und gesamt sich so verhalten hat"
+    },
+    {
+      "number": 32,
+      "codeGroup": "Allgemeines",
+      "code": "Allgemein (un)zufrieden (mit der Krankenversicherung ) / schon immer da / langjähriger Kunde",
+      "exampleText": "bin zufrieden mit der Krankenversicherung, bin schon lange dabei, bin seit meiner Geburt Kunde und immer zufrieden; alles tip top",
+      "codingRule": "Aussagen zur Zufriedenheit mit der Krankenversicherung / der Marke / dem Unternehmen"
+    },
+    {
+      "number": 33,
+      "codeGroup": "Allgemeines",
+      "code": "Kunde hat keine (zu wenig) Erfahrung mit der Krankenversicherung / kann nichts dazu sagen",
+      "exampleText": "ich kann nichts dazu sagen, ich habe zu wenig Erfahrung, weiss nicht, keine Probleme",
+      "codingRule": "Wenn der Kunde keine spezifische Aussage tätigen kann oder noch keine Erfahrung hat"
+    },
+    {
+      "number": 34,
+      "codeGroup": "Allgemeines",
+      "code": "Keine Angabe",
+      "exampleText": "",
+      "codingRule": "leere Felder oder Felder mit \"xxx\" \"akdakf\" \"k.a.\" \"-\" usw."
+    },
+    {
+      "number": 35,
+      "codeGroup": "Allgemeines",
+      "code": "Unklare Beschreibung / unbrauchbarer Kommentar",
+      "exampleText": "Ich hatte eine Frage zur Rechnung; Ich habe die Hotline angerufen 100% zufrieden gibt es nicht, man kann sich immer verbessern, ich gebe nie die Höchstnote Keine Probleme = Code 33",
+      "codingRule": "Aussagen, welche für die Analyse nicht brauchbar sind / Alles was für die Fragestellung nicht relevant ist. .z.B. wenn der Kunde nur sein Anliegen beschreibt"
+    }
+  ]
+}
