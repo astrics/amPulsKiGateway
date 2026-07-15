@@ -1,131 +1,200 @@
 ﻿using System.Text;
 using System.Text.Json;
+using AiGateway.Api.Models;
 
 namespace AiGateway.Api.Services;
 
-public class LmStudioClient
+public class LmStudioService
 {
     private readonly HttpClient _http;
-    private readonly string _baseUrl;
-    private readonly string _model;
+    private readonly IConfiguration _config;
+    private readonly ILogger<LmStudioService> _logger;
 
-    public LmStudioClient(HttpClient http, IConfiguration config)
+    public LmStudioService(HttpClient http, IConfiguration config, ILogger<LmStudioService> logger)
     {
         _http = http;
-        _baseUrl = config["LmStudio:BaseUrl"] ?? "http://localhost:1234";
-        _model = config["LmStudio:Model"] ?? "qwen2.5-7b-instruct";
+        _config = config;
+        _logger = logger;
+        _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
-    public async Task<LmStudioResponse> ClassifyStatementAsync(string statementText, CancellationToken ct = default)
+    public async Task<AiResult> AnalyzeSync(string text)
     {
-        var requestBody = new
+        var baseUrl = _config["LmStudio:BaseUrl"] ?? "http://localhost:1234";
+        var model = _config["LmStudio:Model"] ?? "default";
+
+        var payload = new
         {
-            model = _model,
+            model,
             messages = new[]
             {
-                new { role = "system", content = PromptBuilder.GetSystemPrompt() },
-                new { role = "user",   content = PromptBuilder.GetUserPrompt(statementText) }
-            },
+            new { role = "system", content = PromptBuilder.GetSystemPrompt() },
+            new { role = "user", content = PromptBuilder.GetUserPrompt(text) }
+        },
             temperature = 0.1,
-            //max_tokens = 512,
-            stream = false
+            max_tokens = 500,
+            //response_format = new { type = "json_object" }
+            response_format = new { type = "text" }
+
         };
 
-        var json = JsonSerializer.Serialize(requestBody);
+        var json = JsonSerializer.Serialize(payload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
-        
-        var response = await _http.PostAsync($"{_baseUrl}/v1/chat/completions", content, ct);
-        response.EnsureSuccessStatusCode();
 
-        var responseJson = await response.Content.ReadAsStringAsync(ct);
-        return ParseResponse(responseJson);
-    }
+        // ===== VOLLES LOGGING =====
+        _logger.LogInformation(
+            "═══ LM STUDIO REQUEST ═══\n" +
+            "URL: {Url}\n" +
+            "Model: {Model}\n" +
+            "Text-Länge: {Len}\n" +
+            "Payload:\n{Payload}",
+            $"{baseUrl}/v1/chat/completions", model, text.Length,
+            json[..Math.Min(2000, json.Length)]);
 
-    private LmStudioResponse ParseResponse(string responseJson)
-    {
-        using var doc = JsonDocument.Parse(responseJson);
-        var root = doc.RootElement;
-
-        var messageContent = root
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString() ?? "";
-
-        // JSON aus der Antwort extrahieren (evtl. in Markdown eingebettet)
-        var cleanJson = ExtractJson(messageContent);
+        HttpResponseMessage response;
+        string responseBody;
 
         try
         {
-            using var resultDoc = JsonDocument.Parse(cleanJson);
-            var result = resultDoc.RootElement;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            response = await _http.PostAsync($"{baseUrl}/v1/chat/completions", content);
+            sw.Stop();
+            responseBody = await response.Content.ReadAsStringAsync();
 
-            var sentiment = result.GetProperty("sentiment").GetString() ?? "Neutral";
+            _logger.LogInformation(
+                "═══ LM STUDIO RESPONSE ═══\n" +
+                "Status: {Status}\n" +
+                "Dauer: {Ms}ms\n" +
+                "Body-Länge: {Len}\n" +
+                "Body:\n{Body}",
+                (int)response.StatusCode, sw.ElapsedMilliseconds,
+                responseBody.Length,
+                responseBody[..Math.Min(3000, responseBody.Length)]);
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(
+                "═══ LM STUDIO TIMEOUT ═══\n" +
+                "URL: {Url}\n" +
+                "Timeout: {Timeout}\n" +
+                "Error: {Error}",
+                $"{baseUrl}/v1/chat/completions", _http.Timeout, ex.Message);
+            throw new Exception($"LM Studio Timeout nach {_http.Timeout.TotalSeconds}s", ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(
+                "═══ LM STUDIO CONNECTION ERROR ═══\n" +
+                "URL: {Url}\n" +
+                "Error: {Error}\n" +
+                "Inner: {Inner}",
+                $"{baseUrl}/v1/chat/completions", ex.Message, ex.InnerException?.Message);
+            throw new Exception($"LM Studio nicht erreichbar: {ex.Message}", ex);
+        }
 
-            var keywords = new List<KeywordResult>();
-            if (result.TryGetProperty("keywords", out var kw) && kw.ValueKind == JsonValueKind.Array)
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError(
+                "═══ LM STUDIO HTTP ERROR ═══\n" +
+                "Status: {Code}\n" +
+                "Body: {Body}",
+                (int)response.StatusCode, responseBody[..Math.Min(1000, responseBody.Length)]);
+            throw new Exception($"LM Studio HTTP {(int)response.StatusCode}: {responseBody[..Math.Min(200, responseBody.Length)]}");
+        }
+
+        return ParseLmStudioResponse(responseBody);
+    }
+
+    private static string StripMarkdownCodeBlock(string text)
+    {
+        text = text.Trim();
+        if (text.StartsWith("```"))
+        {
+            // Erste Zeile entfernen (```json oder ```)
+            var firstNewline = text.IndexOf('\n');
+            if (firstNewline > 0)
+                text = text[(firstNewline + 1)..];
+            // Letztes ``` entfernen
+            if (text.TrimEnd().EndsWith("```"))
+                text = text.TrimEnd()[..^3];
+        }
+        return text.Trim();
+    }
+
+
+    private AiResult ParseLmStudioResponse(string responseBody)
+    {
+        try
+        {
+            var root = JsonSerializer.Deserialize<JsonElement>(responseBody);
+            var contentStr = root
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString() ?? "{}";
+
+            _logger.LogInformation("LM Studio Content: {Content}", contentStr[..Math.Min(500, contentStr.Length)]);
+
+            // ===== Markdown-Wrapper entfernen =====
+            contentStr = StripMarkdownCodeBlock(contentStr);
+
+            var content = JsonSerializer.Deserialize<JsonElement>(contentStr);
+
+            // Sentiment auslesen
+            var sentiment = content.TryGetProperty("sentiment", out var s)
+                ? NormalizeSentiment(s.GetString() ?? "") : "Neutral";
+
+            // Keywords auslesen (Array von {id, label})
+            var keywords = new List<AiKeyword>();
+            if (content.TryGetProperty("keywords", out var kw) && kw.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in kw.EnumerateArray())
                 {
-                    keywords.Add(new KeywordResult
+                    var id = item.TryGetProperty("id", out var idProp) ? idProp.GetInt32() : 0;
+                    var label = item.TryGetProperty("label", out var lblProp) ? lblProp.GetString() ?? "" : "";
+                    if (id > 0 && !string.IsNullOrEmpty(label))
                     {
-                        Id = item.GetProperty("id").GetInt32(),
-                        Label = item.GetProperty("label").GetString() ?? ""
-                    });
+                        keywords.Add(new AiKeyword { Id = id, Label = label });
+                    }
                 }
             }
 
-            return new LmStudioResponse
+            // Statement (Original-Text aus Antwort)
+            var statement = content.TryGetProperty("statement", out var stmt)
+                ? stmt.GetString() ?? "" : "";
+
+            return new AiResult
             {
-                Success = true,
+                Statement = statement,
                 Sentiment = sentiment,
                 Keywords = keywords,
-                RawResponse = messageContent
+                RawResponse = contentStr
             };
         }
         catch (Exception ex)
         {
-            return new LmStudioResponse
+            _logger.LogWarning("Parse-Fehler: {Error}. Raw: {Raw}", ex.Message,
+                responseBody[..Math.Min(500, responseBody.Length)]);
+
+            return new AiResult
             {
-                Success = false,
-                Error = $"JSON-Parse-Fehler: {ex.Message}",
-                RawResponse = messageContent
+                Sentiment = "Neutral",
+                Keywords = new List<AiKeyword>(),
+                RawResponse = responseBody[..Math.Min(5000, responseBody.Length)],
+                ParseError = ex.Message
             };
         }
     }
 
-    private string ExtractJson(string text)
+    private static string NormalizeSentiment(string raw)
     {
-        // Markdown-Code-Block entfernen
-        text = text.Trim();
-        if (text.StartsWith("```json"))
-            text = text[7..];
-        else if (text.StartsWith("```"))
-            text = text[3..];
-        if (text.EndsWith("```"))
-            text = text[..^3];
-
-        // Erstes { bis letztes } extrahieren
-        var start = text.IndexOf('{');
-        var end = text.LastIndexOf('}');
-        if (start >= 0 && end > start)
-            return text[start..(end + 1)];
-
-        return text.Trim();
+        var lower = raw.ToLower().Trim();
+        return lower switch
+        {
+            "positiv" or "positive" or "pos" => "Positiv",
+            "negativ" or "negative" or "neg" => "Negativ",
+            "neutral" => "Neutral",
+            _ => "Neutral"
+        };
     }
-}
-
-public class LmStudioResponse
-{
-    public bool Success { get; set; }
-    public string Sentiment { get; set; } = "";
-    public List<KeywordResult> Keywords { get; set; } = new();
-    public string RawResponse { get; set; } = "";
-    public string? Error { get; set; }
-}
-
-public class KeywordResult
-{
-    public int Id { get; set; }
-    public string Label { get; set; } = "";
 }

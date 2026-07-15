@@ -13,6 +13,15 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+    });
+
+builder.Services.AddHttpClient<LmStudioService>();
+builder.Services.AddSingleton<ResultStore>();
+/*
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -24,7 +33,9 @@ builder.Services.AddHttpClient<LmStudioClient>(client =>
 });
 builder.Services.AddSingleton<BatchJobProcessor>();
 builder.Services.AddSingleton<ResultFileWriter>();
-
+builder.Services.AddHttpClient<OllamaService>();
+builder.Services.AddSingleton<ResultStore>();
+*/
 // ── Configuration ──────────────────────────────────
 builder.Services.Configure<GatewayOptions>(
     builder.Configuration.GetSection(GatewayOptions.SectionName));

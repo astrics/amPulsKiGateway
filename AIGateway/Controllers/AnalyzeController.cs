@@ -1,55 +1,215 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using AiGateway.Api.Services;
-using AiGateway.Api.Models.Requests;
+using AiGateway.Api.Models;
 
 namespace AiGateway.Api.Controllers;
 
 [ApiController]
-[Route("api/analyze")]
-public class AnalyzeController : ControllerBase
+[Route("api/analysis")]
+public class AnalysisController : ControllerBase
 {
-    private readonly BatchJobProcessor _processor;
-    private readonly JobStore _jobStore;
-    private readonly ILogger<AnalyzeController> _logger;
+    private readonly LmStudioService _lmStudio;
+    private readonly ResultStore _store;
+    private readonly ILogger<AnalysisController> _logger;
+    private readonly IConfiguration _config;
 
-    public AnalyzeController(BatchJobProcessor processor, JobStore jobStore, ILogger<AnalyzeController> logger)
+    public AnalysisController(
+        LmStudioService lmStudio,
+        ResultStore store,
+        ILogger<AnalysisController> logger,
+        IConfiguration config)
     {
-        _processor = processor;
-        _jobStore = jobStore;
+        _lmStudio = lmStudio;
+        _store = store;
         _logger = logger;
+        _config = config;
+
+
     }
 
-    [HttpPost]
-    public IActionResult StartAnalysis([FromBody] AnalyzeRequest request)
+    [HttpPost("analyze")]
+    public async Task<IActionResult> Analyze([FromBody] AnalyzeRequest request)
     {
-        if (request.Statements == null || request.Statements.Count == 0)
-            return BadRequest(new { status = "error", message = "Keine Statements übergeben" });
+        if (string.IsNullOrWhiteSpace(request.Text))
+            return BadRequest(new { error = "Text darf nicht leer sein" });
 
-        var jobId = $"job_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..8]}";
-        var dashboard = request.Dashboard ?? "Unbekannt";
+        _logger.LogInformation("Analyse: Statement {Id}, Dashboard={Dash}",
+            request.StatementId, request.Dashboard);
 
-        var statements = request.Statements.Select(s => new StatementInput
+        try
         {
-            StatementId = s.StatementId ?? "",
-            MetadatenId = s.MetadatenId ?? "",
-            Text = s.Text
-        }).ToList();
+            // Cache prüfen
+            var cached = _store.FindByHash(request.TextHash);
+            if (cached != null && cached.Status == "completed")
+            {
+                _logger.LogInformation("Cache-Hit: Hash {Hash} (Statement {From} → {To})",
+                    request.TextHash, cached.StatementId, request.StatementId);
 
-        // Job registrieren
-        _jobStore.CreateJob(jobId, dashboard, statements.Count);
+                var cachedResult = new AnalysisResult
+                {
+                    StatementId = request.StatementId,
+                    MetadatenId = request.MetadatenId,
+                    Dashboard = request.Dashboard,
+                    Text = request.Text,
+                    TextHash = request.TextHash,
+                    Statement = cached.Statement,
+                    Sentiment = cached.Sentiment,
+                    Keywords = cached.Keywords,
+                    RawResponse = cached.RawResponse,
+                    ProcessingMs = 0,
+                    Status = "completed",
+                    CachedFrom = cached.StatementId,
+                    AnalyzedAt = DateTime.UtcNow
+                };
 
-        // Verarbeitung starten
-        _processor.StartJob(jobId, dashboard, statements);
+                await _store.SaveResult(cachedResult);
 
-        _logger.LogInformation("Job {JobId} gestartet: {Count} Statements für {Dashboard}",
-            jobId, statements.Count, dashboard);
+                return Ok(new
+                {
+                    statementId = cachedResult.StatementId,
+                    status = "completed",
+                    cached = true,
+                    cachedFrom = cached.StatementId,
+                    statement = cachedResult.Statement,
+                    sentiment = cachedResult.Sentiment,
+                    keywords = cachedResult.Keywords,
+                    processingMs = 0
+                });
+            }
 
-        return Accepted(new
+            // LM Studio synchron
+            var startTime = DateTime.UtcNow;
+            var aiResult = await _lmStudio.AnalyzeSync(request.Text);
+            var processingMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
+
+            var result = new AnalysisResult
+            {
+                StatementId = request.StatementId,
+                MetadatenId = request.MetadatenId,
+                Dashboard = request.Dashboard,
+                Text = request.Text,
+                TextHash = request.TextHash,
+                Statement = aiResult.Statement,
+                Sentiment = aiResult.Sentiment,
+                Keywords = aiResult.Keywords,
+                RawResponse = aiResult.RawResponse,
+                ParseError = aiResult.ParseError,
+                ProcessingMs = processingMs,
+                Status = "completed",
+                AnalyzedAt = DateTime.UtcNow
+            };
+
+            await _store.SaveResult(result);
+
+            _logger.LogInformation("Fertig: Statement {Id}, Sentiment={Sentiment}, {Ms}ms",
+                request.StatementId, result.Sentiment, processingMs);
+
+            return Ok(new
+            {
+                statementId = result.StatementId,
+                status = "completed",
+                cached = false,
+                statement = result.Statement,
+                sentiment = result.Sentiment,
+                keywords = result.Keywords,
+                rawResponse = result.RawResponse,
+                processingMs
+            });
+        }
+        catch (Exception ex)
         {
-            job_id = jobId,
-            status = "accepted",
-            total_statements = statements.Count,
-            dashboard
+            _logger.LogError(ex, "Fehler bei Statement {Id}", request.StatementId);
+
+            var errorResult = new AnalysisResult
+            {
+                StatementId = request.StatementId,
+                MetadatenId = request.MetadatenId,
+                Dashboard = request.Dashboard,
+                Text = request.Text,
+                TextHash = request.TextHash,
+                Status = "error",
+                ErrorMessage = ex.Message,
+                AnalyzedAt = DateTime.UtcNow
+            };
+
+            await _store.SaveResult(errorResult);
+
+            return StatusCode(500, new
+            {
+                statementId = request.StatementId,
+                status = "error",
+                error = ex.Message
+            });
+        }
+    }
+
+    [HttpGet("results/{dashboard}")]
+    public IActionResult GetResults(string dashboard, [FromQuery] int? since = null)
+    {
+        var results = _store.GetResults(dashboard, since);
+        return Ok(new
+        {
+            dashboard,
+            count = results.Count,
+            results = results.Select(r => new
+            {
+                r.StatementId,
+                r.MetadatenId,
+                r.Status,
+                r.Statement,
+                r.Sentiment,
+                r.Keywords,
+                r.ProcessingMs,
+                r.CachedFrom,
+                r.AnalyzedAt
+            })
         });
+    }
+    /*
+    [HttpGet("result/{statementId:int}")]
+    public IActionResult GetResult(int statementId)
+    {
+        var result = _store.GetResult(statementId);
+        if (result == null)
+            return NotFound(new { error = $"Kein Ergebnis für Statement {statementId}" });
+        return Ok(result);
+    }
+    */
+    [HttpGet("status")]
+    public IActionResult GetStatus()
+    {
+        return Ok(new
+        {
+            status = "ready",
+            totalResults = _store.GetTotalCount(),
+            stats = _store.GetStats(),
+            timestamp = DateTime.UtcNow
+        });
+    }
+
+    [HttpGet("results-all")]
+    public IActionResult GetAllResults([FromQuery] string? status = null)
+    {
+        var results = _store.GetAllResults();
+        if (!string.IsNullOrEmpty(status))
+            results = results.Where(r => r.Status == status).ToList();
+        return Ok(new { count = results.Count, results });
+    }
+
+
+    [HttpGet("result/{statementId}")]
+    public IActionResult GetResult(int statementId, [FromQuery] string dashboard = "Kundendienst")
+    {
+        var resultsPath = _config["Storage:ResultsPath"] ?? @"D:\AI-Gateway\results";
+
+        var filePath = Path.Combine(resultsPath, dashboard, $"statement_{statementId}.json");
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { status = "pending", message = "Ergebnis noch nicht verfügbar" });
+        }
+
+        var json = System.IO.File.ReadAllText(filePath);
+        return Content(json, "application/json");
     }
 }
