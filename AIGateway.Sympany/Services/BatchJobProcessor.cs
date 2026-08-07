@@ -5,12 +5,12 @@ namespace AiGateway.Sympany.Api.Services;
 
 public class BatchJobProcessor
 {
-    private readonly LmStudioClient _client;
+    private readonly ILmStudioClient _client;
     private readonly JobStore _jobStore;
     private readonly ResultFileWriter _fileWriter;
     private readonly ILogger<BatchJobProcessor> _logger;
 
-    public BatchJobProcessor(LmStudioClient client, JobStore jobStore,
+    public BatchJobProcessor(ILmStudioClient client, JobStore jobStore,
         ResultFileWriter fileWriter, ILogger<BatchJobProcessor> logger)
     {
         _client = client;
