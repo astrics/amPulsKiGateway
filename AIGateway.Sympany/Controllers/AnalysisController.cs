@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using AiGateway.Sympany.Api.Models;
 using AiGateway.Sympany.Api.Services;
+using AiGateway.Sympany.Api.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace AiGateway.Sympany.Api.Controllers;
 
@@ -12,17 +14,20 @@ public class AnalysisController : ControllerBase
     private readonly ResultStore _store;
     private readonly ILogger<AnalysisController> _logger;
     private readonly IConfiguration _config;
+    private readonly TimeSpan _analysisTimeout;
 
     public AnalysisController(
         LmStudioService lmStudio,
         ResultStore store,
         ILogger<AnalysisController> logger,
-        IConfiguration config)
+        IConfiguration config,
+        IOptions<GatewayOptions> options)
     {
         _lmStudio = lmStudio;
         _store = store;
         _logger = logger;
         _config = config;
+        _analysisTimeout = TimeSpan.FromSeconds(Math.Max(1, options.Value.RequestTimeoutSeconds));
     }
 
     [HttpPost("analyze")]
@@ -32,6 +37,8 @@ public class AnalysisController : ControllerBase
             return BadRequest(new { error = "Text darf nicht leer sein" });
 
         _logger.LogInformation("Analyse: Statement {Id}, Dashboard={Dash}", request.StatementId, request.Dashboard);
+
+        using var analysisCts = new CancellationTokenSource(_analysisTimeout);
 
         try
         {
@@ -77,7 +84,7 @@ public class AnalysisController : ControllerBase
             }
 
             var startTime = DateTime.UtcNow;
-            var aiResult = await _lmStudio.AnalyzeSync(request.Text, cancellationToken);
+            var aiResult = await _lmStudio.AnalyzeSync(request.Text, analysisCts.Token);
             var processingMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
 
             var result = new AnalysisResult
@@ -105,6 +112,16 @@ public class AnalysisController : ControllerBase
                 result.Sentiment,
                 processingMs);
 
+            if (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogInformation(
+                    "Analyse trotz geschlossener Client-Verbindung abgeschlossen und gespeichert | Statement {Id}",
+                    request.StatementId);
+
+                Response.StatusCode = 499;
+                return new EmptyResult();
+            }
+
             return Ok(new
             {
                 statementId = result.StatementId,
@@ -117,13 +134,40 @@ public class AnalysisController : ControllerBase
                 processingMs
             });
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (analysisCts.IsCancellationRequested)
         {
-            _logger.LogInformation(
-                "Analyse abgebrochen, weil der Client die Verbindung geschlossen hat | Statement {Id}",
+            _logger.LogError(
+                ex,
+                "Analyse nach {TimeoutSeconds}s durch Gateway-Timeout beendet | Statement {Id}",
+                _analysisTimeout.TotalSeconds,
                 request.StatementId);
 
-            return new EmptyResult();
+            var errorResult = new AnalysisResult
+            {
+                StatementId = request.StatementId,
+                MetadatenId = request.MetadatenId,
+                Dashboard = request.Dashboard,
+                Text = request.Text,
+                TextHash = request.TextHash,
+                Status = "error",
+                ErrorMessage = $"Gateway-Timeout nach {_analysisTimeout.TotalSeconds:0}s",
+                AnalyzedAt = DateTime.UtcNow
+            };
+
+            await _store.SaveResult(errorResult);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                Response.StatusCode = 499;
+                return new EmptyResult();
+            }
+
+            return StatusCode(504, new
+            {
+                statementId = request.StatementId,
+                status = "error",
+                error = errorResult.ErrorMessage
+            });
         }
         catch (Exception ex)
         {

@@ -60,7 +60,7 @@ public class GatewayOptions
     /// Timeout für einen einzelnen LM Studio Request in Sekunden
     /// CPU-Inferenz kann lange dauern!
     /// </summary>
-    public int RequestTimeoutSeconds { get; set; } = 3000;
+    public int RequestTimeoutSeconds { get; set; } = 300;
 
     /// <summary>
     /// Geschätzte Zeichen pro Token (Deutsch ≈ 3-4)

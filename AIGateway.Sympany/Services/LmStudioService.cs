@@ -9,12 +9,18 @@ public class LmStudioService
     private readonly HttpClient _http;
     private readonly IConfiguration _config;
     private readonly ILogger<LmStudioService> _logger;
+    private readonly LmStudioConcurrencyGate _concurrencyGate;
 
-    public LmStudioService(HttpClient http, IConfiguration config, ILogger<LmStudioService> logger)
+    public LmStudioService(
+        HttpClient http,
+        IConfiguration config,
+        ILogger<LmStudioService> logger,
+        LmStudioConcurrencyGate concurrencyGate)
     {
         _http = http;
         _config = config;
         _logger = logger;
+        _concurrencyGate = concurrencyGate;
         _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
@@ -51,6 +57,7 @@ public class LmStudioService
 
         try
         {
+            using var lease = await _concurrencyGate.EnterAsync(cancellationToken);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             response = await _http.PostAsync($"{baseUrl}/v1/chat/completions", content, cancellationToken);
             sw.Stop();
@@ -67,9 +74,9 @@ public class LmStudioService
         {
             _logger.LogInformation(
                 ex,
-                "LM Studio Request abgebrochen, weil der Client die Verbindung geschlossen hat | Url: {Url}",
+                "LM Studio Request durch Gateway-Timeout abgebrochen | Url: {Url}",
                 $"{baseUrl}/v1/chat/completions");
-            throw new OperationCanceledException("Request aborted by client.", ex, cancellationToken);
+            throw new OperationCanceledException("LM Studio request canceled by gateway timeout.", ex, cancellationToken);
         }
         catch (TaskCanceledException ex)
         {

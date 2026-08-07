@@ -9,13 +9,18 @@ public class LmStudioRuntimeClient : ILmStudioClient
     private readonly string _baseUrl;
     private readonly string _model;
     private readonly double _temperature;
+    private readonly LmStudioConcurrencyGate _concurrencyGate;
 
-    public LmStudioRuntimeClient(HttpClient http, IConfiguration config)
+    public LmStudioRuntimeClient(
+        HttpClient http,
+        IConfiguration config,
+        LmStudioConcurrencyGate concurrencyGate)
     {
         _http = http;
         _baseUrl = config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         _model = config["Gateway:ModelName"] ?? "qwen2.5-7b-instruct";
         _temperature = config.GetValue<double?>("Gateway:Temperature") ?? 0.1;
+        _concurrencyGate = concurrencyGate;
     }
 
     public async Task<LmStudioResponse> ClassifyStatementAsync(string statementText, CancellationToken ct = default)
@@ -145,6 +150,7 @@ public class LmStudioRuntimeClient : ILmStudioClient
         string userPrompt,
         CancellationToken ct)
     {
+        using var lease = await _concurrencyGate.EnterAsync(ct);
         var requestBody = new
         {
             model = _model,
