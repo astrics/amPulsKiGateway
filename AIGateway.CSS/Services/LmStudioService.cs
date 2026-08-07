@@ -18,7 +18,7 @@ public class LmStudioService
         _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
-    public async Task<AiResult> AnalyzeSync(string text)
+    public async Task<AiResult> AnalyzeSync(string text, CancellationToken cancellationToken = default)
     {
         var baseUrl = _config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         var model = _config["Gateway:ModelName"] ?? "default";
@@ -52,9 +52,9 @@ public class LmStudioService
         try
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            response = await _http.PostAsync($"{baseUrl}/v1/chat/completions", content);
+            response = await _http.PostAsync($"{baseUrl}/v1/chat/completions", content, cancellationToken);
             sw.Stop();
-            responseBody = await response.Content.ReadAsStringAsync();
+            responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             _logger.LogInformation(
                 "LM Studio Response | Status: {Status} | Dauer: {Ms}ms | Body-Länge: {Len} | Body: {Body}",
@@ -62,6 +62,14 @@ public class LmStudioService
                 sw.ElapsedMilliseconds,
                 responseBody.Length,
                 responseBody[..Math.Min(3000, responseBody.Length)]);
+        }
+        catch (TaskCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                ex,
+                "LM Studio Request abgebrochen, weil der Client die Verbindung geschlossen hat | Url: {Url}",
+                $"{baseUrl}/v1/chat/completions");
+            throw new OperationCanceledException("Request aborted by client.", ex, cancellationToken);
         }
         catch (TaskCanceledException ex)
         {

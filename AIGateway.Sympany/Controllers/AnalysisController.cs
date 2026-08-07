@@ -26,7 +26,7 @@ public class AnalysisController : ControllerBase
     }
 
     [HttpPost("analyze")]
-    public async Task<IActionResult> Analyze([FromBody] SyncAnalyzeRequest request)
+    public async Task<IActionResult> Analyze([FromBody] SyncAnalyzeRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Text))
             return BadRequest(new { error = "Text darf nicht leer sein" });
@@ -77,7 +77,7 @@ public class AnalysisController : ControllerBase
             }
 
             var startTime = DateTime.UtcNow;
-            var aiResult = await _lmStudio.AnalyzeSync(request.Text);
+            var aiResult = await _lmStudio.AnalyzeSync(request.Text, cancellationToken);
             var processingMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
 
             var result = new AnalysisResult
@@ -116,6 +116,14 @@ public class AnalysisController : ControllerBase
                 rawResponse = result.RawResponse,
                 processingMs
             });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Analyse abgebrochen, weil der Client die Verbindung geschlossen hat | Statement {Id}",
+                request.StatementId);
+
+            return new EmptyResult();
         }
         catch (Exception ex)
         {

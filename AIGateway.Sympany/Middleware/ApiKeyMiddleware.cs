@@ -1,4 +1,5 @@
-﻿using AiGateway.Sympany.Api.Configuration;
+using AiGateway.Sympany.Api.Configuration;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.Options;
 
 namespace AiGateway.Sympany.Api.Middleware;
@@ -33,7 +34,7 @@ public class ApiKeyMiddleware
         if (path.Contains("/api/health"))
         {
             _logger.LogTrace("Health-Check von {IP} - Auth übersprungen", ip);
-            await _next(context);
+            await InvokeNextSafelyAsync(context, method, path, ip);
             return;
         }
 
@@ -47,8 +48,8 @@ public class ApiKeyMiddleware
             return;
         }
 
-        var keyPreview = providedKey.ToString().Length >= 4 
-            ? providedKey.ToString()[..4] + "***" 
+        var keyPreview = providedKey.ToString().Length >= 4
+            ? providedKey.ToString()[..4] + "***"
             : "***";
 
         if (!_options.ApiKeys.Contains(providedKey.ToString()))
@@ -60,10 +61,49 @@ public class ApiKeyMiddleware
             return;
         }
 
-        _logger.LogDebug("✅ Auth erfolgreich: {KeyPreview} | {Method} {Path}", 
+        _logger.LogDebug("✅ Auth erfolgreich: {KeyPreview} | {Method} {Path}",
             keyPreview, method, path);
 
-        await _next(context);
+        await InvokeNextSafelyAsync(context, method, path, ip);
+    }
+
+    private async Task InvokeNextSafelyAsync(
+        HttpContext context,
+        string method,
+        string path,
+        System.Net.IPAddress? ip)
+    {
+        try
+        {
+            await _next(context);
+        }
+        catch (ConnectionResetException ex)
+        {
+            HandleClientDisconnect(context, method, path, ip, ex);
+        }
+        catch (OperationCanceledException ex) when (context.RequestAborted.IsCancellationRequested)
+        {
+            HandleClientDisconnect(context, method, path, ip, ex);
+        }
+    }
+
+    private void HandleClientDisconnect(
+        HttpContext context,
+        string method,
+        string path,
+        System.Net.IPAddress? ip,
+        Exception ex)
+    {
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = 499;
+        }
+
+        _logger.LogInformation(
+            ex,
+            "Client-Verbindung vorzeitig beendet | {Method} {Path} | IP: {IP}",
+            method,
+            path,
+            ip);
     }
 }
-
