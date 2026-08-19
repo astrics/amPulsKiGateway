@@ -29,6 +29,76 @@ public class LmStudioService
 
     public async Task<AiResult> AnalyzeSync(string text, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("CSS-Klassifizierungsstrategie: {Mode}", _promptService.ClassificationMode);
+
+        return _promptService.UsesTwoStageClassification
+            ? await AnalyzeTwoStageAsync(text, cancellationToken)
+            : await AnalyzeSinglePassAsync(text, cancellationToken);
+    }
+
+    private async Task<AiResult> AnalyzeSinglePassAsync(string text, CancellationToken cancellationToken)
+    {
+        var responseBody = await SendChatCompletionAsync(
+            _promptService.GetSystemPrompt(),
+            _promptService.BuildUserPrompt(text),
+            1200,
+            "single_pass",
+            cancellationToken);
+
+        var result = CssAiResponseParser.ParseCompletionResponse(responseBody, _logger);
+        result.Statement = string.IsNullOrWhiteSpace(result.Statement) ? text : result.Statement;
+        _promptService.NormalizeResult(result);
+        return result;
+    }
+
+    private async Task<AiResult> AnalyzeTwoStageAsync(string text, CancellationToken cancellationToken)
+    {
+        var preselectionResponse = await SendChatCompletionAsync(
+            _promptService.GetCodeGroupSystemPrompt(),
+            _promptService.BuildCodeGroupUserPrompt(text),
+            450,
+            "codegroup_preselection",
+            cancellationToken);
+
+        var preselection = CssAiResponseParser.ParseCompletionResponse(preselectionResponse, _logger);
+        preselection.Statement = string.IsNullOrWhiteSpace(preselection.Statement) ? text : preselection.Statement;
+        _promptService.NormalizeResult(preselection);
+
+        var selectedGroups = _promptService.SelectKnownCodeGroups(
+            preselection.CodeGroupSentiments.Select(group => group.CodeGroup));
+
+        _logger.LogInformation(
+            "CSS-Codegruppen-Vorselektion: {Count} Gruppen -> {Groups}",
+            selectedGroups.Count,
+            selectedGroups.Count == 0 ? "<keine>" : string.Join(", ", selectedGroups));
+
+        if (selectedGroups.Count == 0)
+        {
+            return _promptService.BuildPreselectionFallback(text, preselection);
+        }
+
+        var finalResponse = await SendChatCompletionAsync(
+            _promptService.BuildCodeSelectionSystemPrompt(selectedGroups),
+            _promptService.BuildCodeSelectionUserPrompt(text, preselection.CodeGroupSentiments),
+            900,
+            "code_selection",
+            cancellationToken);
+
+        var finalResult = CssAiResponseParser.ParseCompletionResponse(finalResponse, _logger);
+        finalResult.Statement = string.IsNullOrWhiteSpace(finalResult.Statement) ? text : finalResult.Statement;
+        _promptService.NormalizeResult(finalResult);
+        _promptService.RestrictResultToAllowedGroups(finalResult, selectedGroups);
+        _promptService.NormalizeResult(finalResult);
+        return finalResult;
+    }
+
+    private async Task<string> SendChatCompletionAsync(
+        string systemPrompt,
+        string userPrompt,
+        int maxTokens,
+        string phase,
+        CancellationToken cancellationToken)
+    {
         var baseUrl = _config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         var model = _config["Gateway:ModelName"] ?? "default";
 
@@ -37,22 +107,23 @@ public class LmStudioService
             model,
             messages = new[]
             {
-                new { role = "system", content = _promptService.GetSystemPrompt() },
-                new { role = "user", content = _promptService.BuildUserPrompt(text) }
+                new { role = "system", content = systemPrompt },
+                new { role = "user", content = userPrompt }
             },
             temperature = 0.1,
-            max_tokens = 1200,
+            max_tokens = maxTokens,
             response_format = new { type = "text" }
         };
 
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         _logger.LogInformation(
-            "LM Studio Request | Url: {Url} | Model: {Model} | Text-Laenge: {Len} | Payload: {Payload}",
+            "LM Studio Request | Phase: {Phase} | Url: {Url} | Model: {Model} | Text-Laenge: {Len} | Payload: {Payload}",
+            phase,
             $"{baseUrl}/v1/chat/completions",
             model,
-            text.Length,
+            userPrompt.Length,
             json[..Math.Min(2000, json.Length)]);
 
         HttpResponseMessage response;
@@ -67,7 +138,8 @@ public class LmStudioService
             responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             _logger.LogInformation(
-                "LM Studio Response | Status: {Status} | Dauer: {Ms}ms | Body-Laenge: {Len} | Body: {Body}",
+                "LM Studio Response | Phase: {Phase} | Status: {Status} | Dauer: {Ms}ms | Body-Laenge: {Len} | Body: {Body}",
+                phase,
                 (int)response.StatusCode,
                 sw.ElapsedMilliseconds,
                 responseBody.Length,
@@ -77,7 +149,8 @@ public class LmStudioService
         {
             _logger.LogInformation(
                 ex,
-                "LM Studio Request abgebrochen, weil der Client die Verbindung geschlossen hat | Url: {Url}",
+                "LM Studio Request abgebrochen, weil der Client die Verbindung geschlossen hat | Phase: {Phase} | Url: {Url}",
+                phase,
                 $"{baseUrl}/v1/chat/completions");
             throw new OperationCanceledException("Request aborted by client.", ex, cancellationToken);
         }
@@ -85,7 +158,8 @@ public class LmStudioService
         {
             _logger.LogError(
                 ex,
-                "LM Studio Timeout | Url: {Url} | Timeout: {Timeout}",
+                "LM Studio Timeout | Phase: {Phase} | Url: {Url} | Timeout: {Timeout}",
+                phase,
                 $"{baseUrl}/v1/chat/completions",
                 _http.Timeout);
             throw new Exception($"LM Studio Timeout nach {_http.Timeout.TotalSeconds}s", ex);
@@ -94,7 +168,8 @@ public class LmStudioService
         {
             _logger.LogError(
                 ex,
-                "LM Studio Connection Error | Url: {Url}",
+                "LM Studio Connection Error | Phase: {Phase} | Url: {Url}",
+                phase,
                 $"{baseUrl}/v1/chat/completions");
             throw new Exception($"LM Studio nicht erreichbar: {ex.Message}", ex);
         }
@@ -102,15 +177,14 @@ public class LmStudioService
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogError(
-                "LM Studio HTTP Error | Status: {Code} | Body: {Body}",
+                "LM Studio HTTP Error | Phase: {Phase} | Status: {Code} | Body: {Body}",
+                phase,
                 (int)response.StatusCode,
                 responseBody[..Math.Min(1000, responseBody.Length)]);
             throw new Exception(
                 $"LM Studio HTTP {(int)response.StatusCode}: {responseBody[..Math.Min(200, responseBody.Length)]}");
         }
 
-        var result = CssAiResponseParser.ParseCompletionResponse(responseBody, _logger);
-        _promptService.NormalizeResult(result);
-        return result;
+        return responseBody;
     }
 }

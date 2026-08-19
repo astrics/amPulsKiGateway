@@ -6,35 +6,207 @@ namespace AiGateway.CSS.Api.Services;
 
 public sealed class CssCodebookPromptService
 {
+    private const string SinglePassMode = "single_pass";
+    private const string TwoStageMode = "two_stage";
+
     private readonly CssCodebook _codebook;
     private readonly Dictionary<int, CssCodebookLabel> _labelsById;
-    private readonly string _systemPrompt;
+    private readonly Dictionary<string, List<CssCodebookLabel>> _labelsByGroup;
+    private readonly string _classificationMode;
+    private readonly int _maxCodeGroupsPerStatement;
+    private readonly int _maxCodingRuleLength;
+    private readonly int _maxExampleLength;
+    private readonly string _singlePassSystemPrompt;
+    private readonly string _codeGroupSystemPrompt;
     private readonly ILogger<CssCodebookPromptService> _logger;
 
     public CssCodebookPromptService(IConfiguration config, ILogger<CssCodebookPromptService> logger)
     {
         _logger = logger;
         _codebook = LoadCodebook(config);
+        _classificationMode = NormalizeMode(config["CssCodebook:ClassificationMode"]);
+        _maxCodeGroupsPerStatement = Math.Max(1, config.GetValue<int?>("CssCodebook:MaxCodeGroupsPerStatement") ?? 3);
+        _maxCodingRuleLength = Math.Max(120, config.GetValue<int?>("CssCodebook:MaxCodingRuleLength") ?? 280);
+        _maxExampleLength = Math.Max(80, config.GetValue<int?>("CssCodebook:MaxExampleLength") ?? 180);
+
         _labelsById = _codebook.Labels
             .Where(label => label.Number > 0)
             .GroupBy(label => label.Number)
             .Select(group => group.First())
             .ToDictionary(label => label.Number);
-        _systemPrompt = BuildSystemPrompt(_codebook);
+
+        _labelsByGroup = _codebook.Labels
+            .Where(label => !string.IsNullOrWhiteSpace(label.CodeGroup))
+            .GroupBy(label => NormalizeWhitespace(label.CodeGroup), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.First().CodeGroup,
+                group => group.OrderBy(label => label.Number).ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+        _singlePassSystemPrompt = BuildSinglePassSystemPrompt();
+        _codeGroupSystemPrompt = BuildCodeGroupSystemPrompt();
 
         _logger.LogInformation(
-            "CSS-Codebook geladen: {Count} Codes in {Groups} Codegruppen",
+            "CSS-Codebook geladen: {Count} Codes in {Groups} Codegruppen | Strategie: {Mode}",
             _codebook.Labels.Count,
-            _codebook.Labels.Select(label => label.CodeGroup).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            _labelsByGroup.Count,
+            _classificationMode);
     }
 
-    public string GetSystemPrompt() => _systemPrompt;
+    public string ClassificationMode => _classificationMode;
+
+    public bool UsesTwoStageClassification => string.Equals(_classificationMode, TwoStageMode, StringComparison.OrdinalIgnoreCase);
+
+    public string GetSystemPrompt() => _singlePassSystemPrompt;
 
     public string BuildUserPrompt(string statementText)
     {
-        return "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS.\n" +
-               "Antworte ausschliesslich mit dem geforderten JSON.\n\n" +
-               "Kundenaussage:\n\"" + statementText + "\"";
+        return BuildStatementPrompt(
+            "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme die passenden Codes.",
+            statementText);
+    }
+
+    public string GetCodeGroupSystemPrompt() => _codeGroupSystemPrompt;
+
+    public string BuildCodeGroupUserPrompt(string statementText)
+    {
+        return BuildStatementPrompt(
+            "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen.",
+            statementText);
+    }
+
+    public string BuildCodeSelectionSystemPrompt(IEnumerable<string> selectedGroups)
+    {
+        var groups = SelectKnownCodeGroups(selectedGroups);
+        var builder = new StringBuilder();
+
+        builder.AppendLine("Du bist ein spezialisiertes Klassifikationsmodell fuer offene Kundenaussagen einer Krankenversicherung.");
+        builder.AppendLine();
+        builder.AppendLine("Deine Aufgaben:");
+        builder.AppendLine("1. Analysiere genau eine einzelne Kundenaussage.");
+        builder.AppendLine("2. Waehle passende Codes ausschliesslich aus den unten freigegebenen Codegruppen aus.");
+        builder.AppendLine("3. Bestimme fuer jeden ausgewaehlten Code ein Sentiment: Positiv, Negativ oder Neutral.");
+        builder.AppendLine("4. Bestimme daraus ein Sentiment pro verwendeter Codegruppe.");
+        builder.AppendLine("5. Bestimme zusaetzlich ein Gesamt-Sentiment fuer die Aussage.");
+        builder.AppendLine();
+        builder.AppendLine("Wichtige Regeln:");
+        builder.AppendLine("- Gib IMMER gueltiges JSON zurueck und keinerlei Text ausserhalb des JSON.");
+        builder.AppendLine("- Verwende AUSSCHLIESSLICH Codes aus den unten freigegebenen Codegruppen.");
+        builder.AppendLine("- Erfinde keine neuen Codes oder Codegruppen.");
+        builder.AppendLine("- Wenn innerhalb der freigegebenen Codegruppen kein Code sicher passt, gib leere Arrays fuer keywords, codeMatches und codeGroupSentiments zurueck.");
+        builder.AppendLine("- keywords und codeMatches muessen dieselben Codes enthalten.");
+        builder.AppendLine("- codeGroupSentiments darf nur Codegruppen enthalten, in denen mindestens ein Code gematcht wurde.");
+        builder.AppendLine("- Wenn in einer Codegruppe sowohl positive als auch negative Aspekte vorkommen, setze das Sentiment der Codegruppe auf Neutral.");
+        builder.AppendLine();
+        AppendFinalOutputSchema(builder);
+        builder.AppendLine();
+        builder.AppendLine("Freigegebene CSS-Codegruppen und Codes:");
+
+        foreach (var groupName in groups)
+        {
+            if (!_labelsByGroup.TryGetValue(groupName, out var labels))
+            {
+                continue;
+            }
+
+            builder.AppendLine($"Codegruppe: {groupName}");
+            foreach (var label in labels)
+            {
+                builder.AppendLine($"- ID {label.Number}: {label.Code}");
+                if (!string.IsNullOrWhiteSpace(label.CodingRule))
+                {
+                    builder.AppendLine($"  Codierregel: {Condense(label.CodingRule, _maxCodingRuleLength)}");
+                }
+                if (!string.IsNullOrWhiteSpace(label.ExampleText))
+                {
+                    builder.AppendLine($"  Beispiele: {Condense(label.ExampleText, _maxExampleLength)}");
+                }
+            }
+            builder.AppendLine();
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    public string BuildCodeSelectionUserPrompt(string statementText, IEnumerable<AiCodeGroupSentiment> preselectedGroups)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS.");
+        builder.AppendLine("Nutze die Vorselektion der Codegruppen als Hinweis, aber pruefe die Aussage selbst sorgfaeltig.");
+
+        var groups = preselectedGroups
+            .Where(group => !string.IsNullOrWhiteSpace(group.CodeGroup))
+            .Select(group => new
+            {
+                CodeGroup = ResolveKnownGroupName(group.CodeGroup) ?? NormalizeWhitespace(group.CodeGroup),
+                Sentiment = NormalizeSentiment(group.Sentiment)
+            })
+            .Where(group => !string.IsNullOrWhiteSpace(group.CodeGroup))
+            .Distinct()
+            .Take(_maxCodeGroupsPerStatement)
+            .ToList();
+
+        if (groups.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("Vorselektion aus Stufe 1:");
+            foreach (var group in groups)
+            {
+                builder.AppendLine($"- {group.CodeGroup}: {group.Sentiment}");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("Antworte ausschliesslich mit dem geforderten JSON.");
+        builder.AppendLine();
+        builder.AppendLine("Kundenaussage:");
+        builder.Append('"').Append(statementText).AppendLine("\"");
+        return builder.ToString().Trim();
+    }
+
+    public List<string> SelectKnownCodeGroups(IEnumerable<string> groups)
+    {
+        return groups
+            .Select(ResolveKnownGroupName)
+            .Where(group => !string.IsNullOrWhiteSpace(group))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(_maxCodeGroupsPerStatement)
+            .ToList()!;
+    }
+
+    public AiResult BuildPreselectionFallback(string statementText, AiResult preselection)
+    {
+        preselection.Statement = string.IsNullOrWhiteSpace(preselection.Statement) ? statementText : preselection.Statement;
+        preselection.Keywords = new List<AiKeyword>();
+        preselection.CodeMatches = new List<AiCodeMatch>();
+        NormalizeResult(preselection);
+        return preselection;
+    }
+
+    public void RestrictResultToAllowedGroups(AiResult result, IEnumerable<string> allowedGroups)
+    {
+        if (result == null)
+        {
+            return;
+        }
+
+        var allowed = new HashSet<string>(SelectKnownCodeGroups(allowedGroups), StringComparer.OrdinalIgnoreCase);
+        if (allowed.Count == 0)
+        {
+            return;
+        }
+
+        result.CodeMatches = result.CodeMatches
+            .Where(match => allowed.Contains(match.CodeGroup))
+            .ToList();
+
+        result.Keywords = result.Keywords
+            .Where(keyword => result.CodeMatches.Any(match => match.Id == keyword.Id))
+            .ToList();
+
+        result.CodeGroupSentiments = result.CodeGroupSentiments
+            .Where(group => allowed.Contains(group.CodeGroup))
+            .ToList();
     }
 
     public void NormalizeResult(AiResult result)
@@ -135,17 +307,7 @@ public sealed class CssCodebookPromptService
 
     private AiCodeGroupSentiment NormalizeGroupSentiment(AiCodeGroupSentiment input)
     {
-        var groupName = NormalizeWhitespace(input.CodeGroup);
-        if (!string.IsNullOrWhiteSpace(groupName))
-        {
-            var matchingLabel = _codebook.Labels
-                .FirstOrDefault(label => string.Equals(label.CodeGroup, groupName, StringComparison.OrdinalIgnoreCase));
-            if (matchingLabel != null)
-            {
-                groupName = matchingLabel.CodeGroup;
-            }
-        }
-
+        var groupName = ResolveKnownGroupName(input.CodeGroup) ?? NormalizeWhitespace(input.CodeGroup);
         return new AiCodeGroupSentiment
         {
             CodeGroup = groupName,
@@ -199,6 +361,140 @@ public sealed class CssCodebookPromptService
         return sentiments.Count == 1 ? sentiments[0] : "Neutral";
     }
 
+    private string BuildSinglePassSystemPrompt()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Du bist ein spezialisiertes Klassifikationsmodell fuer offene Kundenaussagen einer Krankenversicherung.");
+        builder.AppendLine();
+        builder.AppendLine("Deine Aufgaben:");
+        builder.AppendLine("1. Analysiere genau eine einzelne Kundenaussage.");
+        builder.AppendLine("2. Waehle alle fachlich passenden Codes aus der vorgegebenen CSS-Codeliste aus.");
+        builder.AppendLine("3. Bestimme fuer jeden ausgewaehlten Code ein Sentiment: Positiv, Negativ oder Neutral.");
+        builder.AppendLine("4. Verdichte diese Codings zu einem Sentiment pro Codegruppe.");
+        builder.AppendLine("5. Bestimme zusaetzlich ein Gesamt-Sentiment fuer die gesamte Aussage.");
+        builder.AppendLine();
+        builder.AppendLine("Wichtige Regeln:");
+        builder.AppendLine("- Gib IMMER gueltiges JSON zurueck und keinerlei Text ausserhalb des JSON.");
+        builder.AppendLine("- Verwende AUSSCHLIESSLICH Codes aus der unten aufgefuehrten Liste.");
+        builder.AppendLine("- Erfinde keine neuen Codes oder Codegruppen.");
+        builder.AppendLine("- Eine Aussage kann mehrere Codes enthalten, auch aus verschiedenen Codegruppen.");
+        builder.AppendLine("- Vergib einen Code nur dann, wenn die Aussage inhaltlich wirklich dazu passt.");
+        builder.AppendLine("- Wenn kein Code sicher passt, gib leere Arrays fuer keywords, codeMatches und codeGroupSentiments zurueck.");
+        builder.AppendLine("- keywords muss die gleiche Auswahl wie codeMatches enthalten. Jeder keywords-Eintrag nutzt dieselbe id und denselben Code-Text wie der passende codeMatches-Eintrag.");
+        builder.AppendLine("- codeGroupSentiments darf nur Codegruppen enthalten, in denen mindestens ein Code gematcht wurde.");
+        builder.AppendLine("- Wenn in derselben Codegruppe sowohl positive als auch negative Aspekte vorkommen, setze das Sentiment der Codegruppe auf Neutral.");
+        builder.AppendLine("- Wenn eine Aussage fuer einen Code bzw. eine Codegruppe rein beschreibend und nicht klar wertend ist, setze das Sentiment auf Neutral.");
+        builder.AppendLine("- Bevorzuge praezise Codings gegenueber moeglichst vielen Codings.");
+        builder.AppendLine();
+        AppendFinalOutputSchema(builder);
+        builder.AppendLine();
+        builder.AppendLine("Erlaubte CSS-Codes:");
+
+        foreach (var group in _labelsByGroup)
+        {
+            builder.AppendLine($"Codegruppe: {group.Key}");
+            foreach (var label in group.Value)
+            {
+                builder.AppendLine($"- ID {label.Number}: {label.Code}");
+                if (!string.IsNullOrWhiteSpace(label.CodingRule))
+                {
+                    builder.AppendLine($"  Codierregel: {Condense(label.CodingRule, _maxCodingRuleLength)}");
+                }
+                if (!string.IsNullOrWhiteSpace(label.ExampleText))
+                {
+                    builder.AppendLine($"  Beispiele: {Condense(label.ExampleText, _maxExampleLength)}");
+                }
+            }
+            builder.AppendLine();
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private string BuildCodeGroupSystemPrompt()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Du bist ein spezialisiertes Klassifikationsmodell fuer offene Kundenaussagen einer Krankenversicherung.");
+        builder.AppendLine();
+        builder.AppendLine("Deine Aufgaben in dieser ersten Stufe:");
+        builder.AppendLine("1. Analysiere genau eine einzelne Kundenaussage.");
+        builder.AppendLine("2. Bestimme nur die fachlich passenden CSS-Codegruppen.");
+        builder.AppendLine("3. Bestimme fuer jede passende Codegruppe ein Sentiment: Positiv, Negativ oder Neutral.");
+        builder.AppendLine("4. Bestimme zusaetzlich ein Gesamt-Sentiment fuer die Aussage.");
+        builder.AppendLine();
+        builder.AppendLine("Wichtige Regeln:");
+        builder.AppendLine("- Gib IMMER gueltiges JSON zurueck und keinerlei Text ausserhalb des JSON.");
+        builder.AppendLine("- Verwende AUSSCHLIESSLICH Codegruppen aus der unten aufgefuehrten Liste.");
+        builder.AppendLine("- Erfinde keine neuen Codegruppen.");
+        builder.AppendLine("- Begrenze dich auf die wirklich passenden Codegruppen und waehle hoechstens " + _maxCodeGroupsPerStatement + " Codegruppen aus.");
+        builder.AppendLine("- Wenn keine Codegruppe sicher passt, gib leere Arrays fuer keywords, codeMatches und codeGroupSentiments zurueck.");
+        builder.AppendLine("- In dieser ersten Stufe bleiben keywords und codeMatches leer.");
+        builder.AppendLine();
+        AppendCodeGroupPreselectionSchema(builder);
+        builder.AppendLine();
+        builder.AppendLine("Erlaubte CSS-Codegruppen:");
+
+        foreach (var group in _labelsByGroup)
+        {
+            var topics = string.Join(" | ", group.Value.Select(label => label.Code));
+            builder.AppendLine($"- {group.Key}: {Condense(topics, 260)}");
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private static void AppendFinalOutputSchema(StringBuilder builder)
+    {
+        builder.AppendLine("Verwende fuer die Ausgabe IMMER exakt dieses JSON-Schema:");
+        builder.AppendLine("{");
+        builder.AppendLine("  \"statement\": \"<Originalaussage unveraendert>\",");
+        builder.AppendLine("  \"sentiment\": \"Positiv | Negativ | Neutral\",");
+        builder.AppendLine("  \"keywords\": [");
+        builder.AppendLine("    { \"id\": 1, \"label\": \"<exakter Code-Text>\" }");
+        builder.AppendLine("  ],");
+        builder.AppendLine("  \"codeMatches\": [");
+        builder.AppendLine("    {");
+        builder.AppendLine("      \"id\": 1,");
+        builder.AppendLine("      \"codeGroup\": \"<exakte Codegruppe>\",");
+        builder.AppendLine("      \"code\": \"<exakter Code-Text>\",");
+        builder.AppendLine("      \"sentiment\": \"Positiv | Negativ | Neutral\"");
+        builder.AppendLine("    }");
+        builder.AppendLine("  ],");
+        builder.AppendLine("  \"codeGroupSentiments\": [");
+        builder.AppendLine("    {");
+        builder.AppendLine("      \"codeGroup\": \"<exakte Codegruppe>\",");
+        builder.AppendLine("      \"sentiment\": \"Positiv | Negativ | Neutral\",");
+        builder.AppendLine("      \"matchedCodeIds\": [1]");
+        builder.AppendLine("    }");
+        builder.AppendLine("  ]");
+        builder.AppendLine("}");
+    }
+
+    private static void AppendCodeGroupPreselectionSchema(StringBuilder builder)
+    {
+        builder.AppendLine("Verwende fuer die Ausgabe IMMER exakt dieses JSON-Schema:");
+        builder.AppendLine("{");
+        builder.AppendLine("  \"statement\": \"<Originalaussage unveraendert>\",");
+        builder.AppendLine("  \"sentiment\": \"Positiv | Negativ | Neutral\",");
+        builder.AppendLine("  \"keywords\": [],");
+        builder.AppendLine("  \"codeMatches\": [],");
+        builder.AppendLine("  \"codeGroupSentiments\": [");
+        builder.AppendLine("    {");
+        builder.AppendLine("      \"codeGroup\": \"<exakte Codegruppe>\",");
+        builder.AppendLine("      \"sentiment\": \"Positiv | Negativ | Neutral\",");
+        builder.AppendLine("      \"matchedCodeIds\": []");
+        builder.AppendLine("    }");
+        builder.AppendLine("  ]");
+        builder.AppendLine("}");
+    }
+
+    private static string BuildStatementPrompt(string intro, string statementText)
+    {
+        return intro + "\n" +
+               "Antworte ausschliesslich mit dem geforderten JSON.\n\n" +
+               "Kundenaussage:\n\"" + statementText + "\"";
+    }
+
     private static string NormalizeSentiment(string? raw)
     {
         var lower = (raw ?? string.Empty).Trim().ToLowerInvariant();
@@ -209,6 +505,24 @@ public sealed class CssCodebookPromptService
             "neutral" or "mixed" or "gemischt" => "Neutral",
             _ => "Neutral"
         };
+    }
+
+    private string? ResolveKnownGroupName(string? rawGroupName)
+    {
+        var normalized = NormalizeWhitespace(rawGroupName);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        return _labelsByGroup.Keys.FirstOrDefault(key => string.Equals(key, normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeMode(string? rawMode)
+    {
+        return string.Equals(rawMode?.Trim(), SinglePassMode, StringComparison.OrdinalIgnoreCase)
+            ? SinglePassMode
+            : TwoStageMode;
     }
 
     private static CssCodebook LoadCodebook(IConfiguration config)
@@ -249,78 +563,6 @@ public sealed class CssCodebookPromptService
         }
 
         return Path.Combine(AppContext.BaseDirectory, configuredPath);
-    }
-
-    private static string BuildSystemPrompt(CssCodebook codebook)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("Du bist ein spezialisiertes Klassifikationsmodell fuer offene Kundenaussagen einer Krankenversicherung.");
-        builder.AppendLine();
-        builder.AppendLine("Deine Aufgaben:");
-        builder.AppendLine("1. Analysiere genau eine einzelne Kundenaussage.");
-        builder.AppendLine("2. Waehle alle fachlich passenden Codes aus der vorgegebenen CSS-Codeliste aus.");
-        builder.AppendLine("3. Bestimme fuer jeden ausgewaehlten Code ein Sentiment: Positiv, Negativ oder Neutral.");
-        builder.AppendLine("4. Verdichte diese Codings zu einem Sentiment pro Codegruppe.");
-        builder.AppendLine("5. Bestimme zusaetzlich ein Gesamt-Sentiment fuer die gesamte Aussage.");
-        builder.AppendLine();
-        builder.AppendLine("Wichtige Regeln:");
-        builder.AppendLine("- Gib IMMER gueltiges JSON zurueck und keinerlei Text ausserhalb des JSON.");
-        builder.AppendLine("- Verwende AUSSCHLIESSLICH Codes aus der unten aufgefuehrten Liste.");
-        builder.AppendLine("- Erfinde keine neuen Codes oder Codegruppen.");
-        builder.AppendLine("- Eine Aussage kann mehrere Codes enthalten, auch aus verschiedenen Codegruppen.");
-        builder.AppendLine("- Vergib einen Code nur dann, wenn die Aussage inhaltlich wirklich dazu passt.");
-        builder.AppendLine("- Wenn kein Code sicher passt, gib leere Arrays fuer keywords, codeMatches und codeGroupSentiments zurueck.");
-        builder.AppendLine("- keywords muss die gleiche Auswahl wie codeMatches enthalten. Jeder keywords-Eintrag nutzt dieselbe id und denselben Code-Text wie der passende codeMatches-Eintrag.");
-        builder.AppendLine("- codeGroupSentiments darf nur Codegruppen enthalten, in denen mindestens ein Code gematcht wurde.");
-        builder.AppendLine("- Wenn in derselben Codegruppe sowohl positive als auch negative Aspekte vorkommen, setze das Sentiment der Codegruppe auf Neutral.");
-        builder.AppendLine("- Wenn eine Aussage fuer einen Code bzw. eine Codegruppe rein beschreibend und nicht klar wertend ist, setze das Sentiment auf Neutral.");
-        builder.AppendLine("- Bevorzuge praezise Codings gegenueber moeglichst vielen Codings.");
-        builder.AppendLine();
-        builder.AppendLine("Verwende fuer die Ausgabe IMMER exakt dieses JSON-Schema:");
-        builder.AppendLine("{");
-        builder.AppendLine("  \"statement\": \"<Originalaussage unveraendert>\",");
-        builder.AppendLine("  \"sentiment\": \"Positiv | Negativ | Neutral\",");
-        builder.AppendLine("  \"keywords\": [");
-        builder.AppendLine("    { \"id\": 1, \"label\": \"<exakter Code-Text>\" }");
-        builder.AppendLine("  ],");
-        builder.AppendLine("  \"codeMatches\": [");
-        builder.AppendLine("    {");
-        builder.AppendLine("      \"id\": 1,");
-        builder.AppendLine("      \"codeGroup\": \"<exakte Codegruppe>\",");
-        builder.AppendLine("      \"code\": \"<exakter Code-Text>\",");
-        builder.AppendLine("      \"sentiment\": \"Positiv | Negativ | Neutral\"");
-        builder.AppendLine("    }");
-        builder.AppendLine("  ],");
-        builder.AppendLine("  \"codeGroupSentiments\": [");
-        builder.AppendLine("    {");
-        builder.AppendLine("      \"codeGroup\": \"<exakte Codegruppe>\",");
-        builder.AppendLine("      \"sentiment\": \"Positiv | Negativ | Neutral\",");
-        builder.AppendLine("      \"matchedCodeIds\": [1]");
-        builder.AppendLine("    }");
-        builder.AppendLine("  ]");
-        builder.AppendLine("}");
-        builder.AppendLine();
-        builder.AppendLine("Erlaubte CSS-Codes:");
-
-        foreach (var group in codebook.Labels.GroupBy(label => label.CodeGroup))
-        {
-            builder.AppendLine($"Codegruppe: {group.Key}");
-            foreach (var label in group)
-            {
-                builder.AppendLine($"- ID {label.Number}: {label.Code}");
-                if (!string.IsNullOrWhiteSpace(label.CodingRule))
-                {
-                    builder.AppendLine($"  Codierregel: {Condense(label.CodingRule, 500)}");
-                }
-                if (!string.IsNullOrWhiteSpace(label.ExampleText))
-                {
-                    builder.AppendLine($"  Beispiele: {Condense(label.ExampleText, 280)}");
-                }
-            }
-            builder.AppendLine();
-        }
-
-        return builder.ToString().Trim();
     }
 
     private static string Condense(string value, int maxLength)

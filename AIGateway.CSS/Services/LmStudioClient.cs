@@ -29,17 +29,16 @@ public class LmStudioClient : ILmStudioClient
 
     public async Task<LmStudioResponse> ClassifyStatementAsync(string statementText, CancellationToken ct = default)
     {
-        var responseJson = await SendChatCompletionAsync(
-            _promptService.GetSystemPrompt(),
-            _promptService.BuildUserPrompt(statementText),
-            ct);
+        var parsed = _promptService.UsesTwoStageClassification
+            ? await ClassifyTwoStageAsync(statementText, ct)
+            : await ClassifySinglePassAsync(statementText, ct);
 
-        return ParseResponse(responseJson);
+        return ToResponse(parsed);
     }
 
     public async Task<string> ChatCompleteAsync(string systemPrompt, string userPrompt, CancellationToken ct)
     {
-        var responseJson = await SendChatCompletionAsync(systemPrompt, userPrompt, ct);
+        var responseJson = await SendChatCompletionAsync(systemPrompt, userPrompt, 1200, ct);
 
         using var doc = JsonDocument.Parse(responseJson);
         var root = doc.RootElement;
@@ -78,11 +77,56 @@ public class LmStudioClient : ILmStudioClient
         }
     }
 
-    private LmStudioResponse ParseResponse(string responseJson)
+    private async Task<AiResult> ClassifySinglePassAsync(string statementText, CancellationToken ct)
     {
-        var parsed = CssAiResponseParser.ParseCompletionResponse(responseJson);
-        _promptService.NormalizeResult(parsed);
+        var responseJson = await SendChatCompletionAsync(
+            _promptService.GetSystemPrompt(),
+            _promptService.BuildUserPrompt(statementText),
+            1200,
+            ct);
 
+        var parsed = CssAiResponseParser.ParseCompletionResponse(responseJson);
+        parsed.Statement = string.IsNullOrWhiteSpace(parsed.Statement) ? statementText : parsed.Statement;
+        _promptService.NormalizeResult(parsed);
+        return parsed;
+    }
+
+    private async Task<AiResult> ClassifyTwoStageAsync(string statementText, CancellationToken ct)
+    {
+        var preselectionJson = await SendChatCompletionAsync(
+            _promptService.GetCodeGroupSystemPrompt(),
+            _promptService.BuildCodeGroupUserPrompt(statementText),
+            450,
+            ct);
+
+        var preselection = CssAiResponseParser.ParseCompletionResponse(preselectionJson);
+        preselection.Statement = string.IsNullOrWhiteSpace(preselection.Statement) ? statementText : preselection.Statement;
+        _promptService.NormalizeResult(preselection);
+
+        var selectedGroups = _promptService.SelectKnownCodeGroups(
+            preselection.CodeGroupSentiments.Select(group => group.CodeGroup));
+
+        if (selectedGroups.Count == 0)
+        {
+            return _promptService.BuildPreselectionFallback(statementText, preselection);
+        }
+
+        var finalJson = await SendChatCompletionAsync(
+            _promptService.BuildCodeSelectionSystemPrompt(selectedGroups),
+            _promptService.BuildCodeSelectionUserPrompt(statementText, preselection.CodeGroupSentiments),
+            900,
+            ct);
+
+        var finalResult = CssAiResponseParser.ParseCompletionResponse(finalJson);
+        finalResult.Statement = string.IsNullOrWhiteSpace(finalResult.Statement) ? statementText : finalResult.Statement;
+        _promptService.NormalizeResult(finalResult);
+        _promptService.RestrictResultToAllowedGroups(finalResult, selectedGroups);
+        _promptService.NormalizeResult(finalResult);
+        return finalResult;
+    }
+
+    private static LmStudioResponse ToResponse(AiResult parsed)
+    {
         return new LmStudioResponse
         {
             Success = string.IsNullOrWhiteSpace(parsed.ParseError),
@@ -115,6 +159,7 @@ public class LmStudioClient : ILmStudioClient
     private async Task<string> SendChatCompletionAsync(
         string systemPrompt,
         string userPrompt,
+        int maxTokens,
         CancellationToken ct)
     {
         using var lease = await _concurrencyGate.EnterAsync(ct);
@@ -127,6 +172,7 @@ public class LmStudioClient : ILmStudioClient
                 new { role = "user", content = userPrompt }
             },
             temperature = _temperature,
+            max_tokens = maxTokens,
             response_format = new { type = "text" },
             stream = false
         };
