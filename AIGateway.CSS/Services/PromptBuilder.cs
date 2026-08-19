@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AiGateway.CSS.Api.Models;
@@ -12,6 +13,7 @@ public sealed class CssCodebookPromptService
     private readonly CssCodebook _codebook;
     private readonly Dictionary<int, CssCodebookLabel> _labelsById;
     private readonly Dictionary<string, List<CssCodebookLabel>> _labelsByGroup;
+    private readonly Dictionary<string, string> _groupAliases;
     private readonly string _classificationMode;
     private readonly int _maxCodeGroupsPerStatement;
     private readonly int _maxCodingRuleLength;
@@ -42,6 +44,7 @@ public sealed class CssCodebookPromptService
                 group => group.First().CodeGroup,
                 group => group.OrderBy(label => label.Number).ToList(),
                 StringComparer.OrdinalIgnoreCase);
+        _groupAliases = BuildGroupAliases();
 
         _singlePassSystemPrompt = BuildSinglePassSystemPrompt();
         _codeGroupSystemPrompt = BuildCodeGroupSystemPrompt();
@@ -71,7 +74,7 @@ public sealed class CssCodebookPromptService
     public string BuildCodeGroupUserPrompt(string statementText)
     {
         return BuildStatementPrompt(
-            "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen.",
+            "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen. Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein. Ordne nach Bedeutung, nicht nach Sprache, zu.",
             statementText);
     }
 
@@ -172,6 +175,22 @@ public sealed class CssCodebookPromptService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(_maxCodeGroupsPerStatement)
             .ToList()!;
+    }
+
+    public List<string> SelectKnownCodeGroups(AiResult result)
+    {
+        if (result == null)
+        {
+            return new List<string>();
+        }
+
+        var candidates = new List<string>();
+        candidates.AddRange(result.CodeGroupSentiments.Select(group => group.CodeGroup));
+        candidates.AddRange(result.CodeMatches.Select(match => match.CodeGroup));
+        candidates.AddRange(result.CodeMatches.Select(match => match.Code));
+        candidates.AddRange(result.Keywords.Select(keyword => keyword.Label));
+
+        return SelectKnownCodeGroups(candidates);
     }
 
     public AiResult BuildPreselectionFallback(string statementText, AiResult preselection)
@@ -429,6 +448,7 @@ public sealed class CssCodebookPromptService
         builder.AppendLine("- Begrenze dich auf die wirklich passenden Codegruppen und waehle hoechstens " + _maxCodeGroupsPerStatement + " Codegruppen aus.");
         builder.AppendLine("- Wenn keine Codegruppe sicher passt, gib leere Arrays fuer keywords, codeMatches und codeGroupSentiments zurueck.");
         builder.AppendLine("- In dieser ersten Stufe bleiben keywords und codeMatches leer.");
+        builder.AppendLine("- Die Kundenaussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch sein. Ordne nach inhaltlicher Bedeutung zu.");
         builder.AppendLine();
         AppendCodeGroupPreselectionSchema(builder);
         builder.AppendLine();
@@ -437,7 +457,18 @@ public sealed class CssCodebookPromptService
         foreach (var group in _labelsByGroup)
         {
             var topics = string.Join(" | ", group.Value.Select(label => label.Code));
-            builder.AppendLine($"- {group.Key}: {Condense(topics, 260)}");
+            var codingHints = string.Join(" ", group.Value.Select(label => label.CodingRule).Where(rule => !string.IsNullOrWhiteSpace(rule)).Take(2));
+            var examples = string.Join(" ", group.Value.Select(label => label.ExampleText).Where(example => !string.IsNullOrWhiteSpace(example)).Take(1));
+
+            builder.AppendLine($"- {group.Key}: Themen {Condense(topics, 220)}");
+            if (!string.IsNullOrWhiteSpace(codingHints))
+            {
+                builder.AppendLine($"  Hinweise: {Condense(codingHints, 260)}");
+            }
+            if (!string.IsNullOrWhiteSpace(examples))
+            {
+                builder.AppendLine($"  Beispiel: {Condense(examples, 180)}");
+            }
         }
 
         return builder.ToString().Trim();
@@ -515,7 +546,121 @@ public sealed class CssCodebookPromptService
             return null;
         }
 
-        return _labelsByGroup.Keys.FirstOrDefault(key => string.Equals(key, normalized, StringComparison.OrdinalIgnoreCase));
+        if (_labelsByGroup.Keys.FirstOrDefault(key => string.Equals(key, normalized, StringComparison.OrdinalIgnoreCase)) is { } exactMatch)
+        {
+            return exactMatch;
+        }
+
+        var lookup = BuildLookupKey(normalized);
+        if (string.IsNullOrWhiteSpace(lookup))
+        {
+            return null;
+        }
+
+        if (_groupAliases.TryGetValue(lookup, out var aliasMatch))
+        {
+            return aliasMatch;
+        }
+
+        return _groupAliases
+            .Where(entry => entry.Key.Length >= 5 &&
+                            (lookup.Contains(entry.Key, StringComparison.OrdinalIgnoreCase) ||
+                             entry.Key.Contains(lookup, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(entry => entry.Key.Length)
+            .Select(entry => entry.Value)
+            .FirstOrDefault();
+    }
+
+    private Dictionary<string, string> BuildGroupAliases()
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var groupName in _labelsByGroup.Keys)
+        {
+            AddGroupAlias(aliases, groupName, groupName);
+        }
+
+        foreach (var label in _codebook.Labels)
+        {
+            if (string.IsNullOrWhiteSpace(label.CodeGroup))
+            {
+                continue;
+            }
+
+            AddGroupAlias(aliases, label.CodeGroup, label.CodeGroup);
+            AddGroupAlias(aliases, label.Code, label.CodeGroup);
+        }
+
+        AddGroupAlias(aliases, "service client", "Kundenbetreuung");
+        AddGroupAlias(aliases, "support client", "Kundenbetreuung");
+        AddGroupAlias(aliases, "hotline", "Kundenbetreuung");
+        AddGroupAlias(aliases, "contact client", "Kundenbetreuung");
+        AddGroupAlias(aliases, "employee", "Mitarbeiter");
+        AddGroupAlias(aliases, "employe", "Mitarbeiter");
+        AddGroupAlias(aliases, "conseiller", "Mitarbeiter");
+        AddGroupAlias(aliases, "advisor", "Mitarbeiter");
+        AddGroupAlias(aliases, "prime", "Prämien & Bezahlung");
+        AddGroupAlias(aliases, "primes", "Prämien & Bezahlung");
+        AddGroupAlias(aliases, "paiement", "Prämien & Bezahlung");
+        AddGroupAlias(aliases, "payment", "Prämien & Bezahlung");
+        AddGroupAlias(aliases, "facturation", "Prämien & Bezahlung");
+        AddGroupAlias(aliases, "produit", "Produkt");
+        AddGroupAlias(aliases, "product", "Produkt");
+        AddGroupAlias(aliases, "offre", "Produkt");
+        AddGroupAlias(aliases, "police", "Produkt");
+        AddGroupAlias(aliases, "remboursement", "Leistungsbezug");
+        AddGroupAlias(aliases, "prestation", "Leistungsbezug");
+        AddGroupAlias(aliases, "claim", "Leistungsbezug");
+        AddGroupAlias(aliases, "portal", "Digital");
+        AddGroupAlias(aliases, "portail", "Digital");
+        AddGroupAlias(aliases, "app", "Digital");
+        AddGroupAlias(aliases, "application", "Digital");
+        AddGroupAlias(aliases, "image", "Image");
+        AddGroupAlias(aliases, "reputation", "Image");
+        AddGroupAlias(aliases, "general", "Allgemeines");
+        AddGroupAlias(aliases, "satisfaction generale", "Allgemeines");
+        AddGroupAlias(aliases, "autres", "Sonstiges");
+        AddGroupAlias(aliases, "other", "Sonstiges");
+
+        return aliases;
+    }
+
+    private static void AddGroupAlias(IDictionary<string, string> aliases, string rawAlias, string groupName)
+    {
+        var lookup = BuildLookupKey(rawAlias);
+        if (string.IsNullOrWhiteSpace(lookup) || aliases.ContainsKey(lookup))
+        {
+            return;
+        }
+
+        aliases[lookup] = groupName;
+    }
+
+    private static string BuildLookupKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = value.Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(normalized.Length);
+
+        foreach (var ch in normalized)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (category == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(ch))
+            {
+                builder.Append(char.ToLowerInvariant(ch));
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static string NormalizeMode(string? rawMode)

@@ -73,7 +73,10 @@ public class LmStudioService
 
         if (selectedGroups.Count == 0)
         {
-            return _promptService.BuildPreselectionFallback(text, preselection);
+            _logger.LogWarning(
+                "CSS-Codegruppen-Vorselektion leer. Fallback auf single_pass fuer die Aussage: {Preview}",
+                text[..Math.Min(160, text.Length)]);
+            return await AnalyzeSinglePassAsync(text, cancellationToken);
         }
 
         var finalResponse = await SendChatCompletionAsync(
