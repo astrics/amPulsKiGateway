@@ -127,7 +127,7 @@ public class LmStudioClient : ILmStudioClient
                 new { role = "user", content = userPrompt }
             },
             temperature = _temperature,
-            response_format = new { type = "json_object" },
+            response_format = new { type = "text" },
             stream = false
         };
 

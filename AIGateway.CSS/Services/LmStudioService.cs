@@ -42,7 +42,7 @@ public class LmStudioService
             },
             temperature = 0.1,
             max_tokens = 1200,
-            response_format = new { type = "json_object" }
+            response_format = new { type = "text" }
         };
 
         var json = JsonSerializer.Serialize(payload);
