@@ -19,12 +19,20 @@ builder.Services.AddControllers()
     });
 builder.Services.AddEndpointsApiExplorer();
 
+var gatewayRequestTimeoutSeconds = Math.Clamp(
+    builder.Configuration.GetValue<int?>("Gateway:RequestTimeoutSeconds") ?? 900,
+    60,
+    7200);
+
 builder.Services.AddSingleton<JobStore>();
 builder.Services.AddHttpClient<ILmStudioClient, LmStudioClient>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(300);
+    client.Timeout = TimeSpan.FromSeconds(gatewayRequestTimeoutSeconds);
 });
-builder.Services.AddHttpClient<LmStudioService>();
+builder.Services.AddHttpClient<LmStudioService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(gatewayRequestTimeoutSeconds);
+});
 builder.Services.AddSingleton<LmStudioConcurrencyGate>();
 builder.Services.AddSingleton<BatchJobProcessor>();
 builder.Services.AddSingleton<ResultFileWriter>();
@@ -85,6 +93,7 @@ Log.Information("===============================================");
 Log.Information("  LM Studio: {Url}", gatewayOptions.LmStudioBaseUrl);
 Log.Information("  Modell: {Model}", gatewayOptions.ModelName);
 Log.Information("  Max Concurrency: {Concurrency}", gatewayOptions.MaxConcurrency);
+Log.Information("  Request Timeout: {Seconds}s", gatewayRequestTimeoutSeconds);
 Log.Information("  Max Tokens/Chunk: {Tokens}", gatewayOptions.MaxTokensPerChunk);
 Log.Information("  Cache-Dauer: {Minutes} Minuten", gatewayOptions.CacheDurationMinutes);
 Log.Information("  Cache-Limit: {Limit:N0} Bytes (~{MB}MB)", 100_000_000, 100);

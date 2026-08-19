@@ -24,7 +24,6 @@ public class LmStudioService
         _logger = logger;
         _concurrencyGate = concurrencyGate;
         _promptService = promptService;
-        _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
     public async Task<AiResult> AnalyzeSync(string text, CancellationToken cancellationToken = default)

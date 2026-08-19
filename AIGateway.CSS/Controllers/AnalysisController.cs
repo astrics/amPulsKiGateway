@@ -89,7 +89,7 @@ public class AnalysisController : ControllerBase
             }
 
             var startTime = DateTime.UtcNow;
-            var aiResult = await _lmStudio.AnalyzeSync(request.Text, cancellationToken);
+            var aiResult = await _lmStudio.AnalyzeSync(request.Text, CancellationToken.None);
             var processingMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
 
             var result = new AnalysisResult
