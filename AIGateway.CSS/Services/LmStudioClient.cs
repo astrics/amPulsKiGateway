@@ -1,5 +1,6 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
+using AiGateway.CSS.Api.Models;
 
 namespace AiGateway.CSS.Api.Services;
 
@@ -10,21 +11,27 @@ public class LmStudioClient : ILmStudioClient
     private readonly string _model;
     private readonly double _temperature;
     private readonly LmStudioConcurrencyGate _concurrencyGate;
+    private readonly CssCodebookPromptService _promptService;
 
-    public LmStudioClient(HttpClient http, IConfiguration config, LmStudioConcurrencyGate concurrencyGate)
+    public LmStudioClient(
+        HttpClient http,
+        IConfiguration config,
+        LmStudioConcurrencyGate concurrencyGate,
+        CssCodebookPromptService promptService)
     {
         _http = http;
         _baseUrl = config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         _model = config["Gateway:ModelName"] ?? "qwen2.5-7b-instruct";
         _temperature = config.GetValue<double?>("Gateway:Temperature") ?? 0.1;
         _concurrencyGate = concurrencyGate;
+        _promptService = promptService;
     }
 
     public async Task<LmStudioResponse> ClassifyStatementAsync(string statementText, CancellationToken ct = default)
     {
         var responseJson = await SendChatCompletionAsync(
-            PromptBuilder.GetSystemPrompt(),
-            PromptBuilder.GetUserPrompt(statementText),
+            _promptService.GetSystemPrompt(),
+            _promptService.BuildUserPrompt(statementText),
             ct);
 
         return ParseResponse(responseJson);
@@ -73,73 +80,36 @@ public class LmStudioClient : ILmStudioClient
 
     private LmStudioResponse ParseResponse(string responseJson)
     {
-        using var doc = JsonDocument.Parse(responseJson);
-        var root = doc.RootElement;
+        var parsed = CssAiResponseParser.ParseCompletionResponse(responseJson);
+        _promptService.NormalizeResult(parsed);
 
-        var messageContent = root
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString() ?? string.Empty;
-
-        var cleanJson = ExtractJson(messageContent);
-
-        try
+        return new LmStudioResponse
         {
-            using var resultDoc = JsonDocument.Parse(cleanJson);
-            var result = resultDoc.RootElement;
-
-            var sentiment = result.GetProperty("sentiment").GetString() ?? "Neutral";
-
-            var keywords = new List<KeywordResult>();
-            if (result.TryGetProperty("keywords", out var kw) && kw.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in kw.EnumerateArray())
+            Success = string.IsNullOrWhiteSpace(parsed.ParseError),
+            Sentiment = parsed.Sentiment,
+            Keywords = parsed.Keywords
+                .Select(keyword => new KeywordResult { Id = keyword.Id, Label = keyword.Label })
+                .ToList(),
+            CodeMatches = parsed.CodeMatches
+                .Select(match => new AiCodeMatch
                 {
-                    keywords.Add(new KeywordResult
-                    {
-                        Id = item.GetProperty("id").GetInt32(),
-                        Label = item.GetProperty("label").GetString() ?? string.Empty
-                    });
-                }
-            }
-
-            return new LmStudioResponse
-            {
-                Success = true,
-                Sentiment = sentiment,
-                Keywords = keywords,
-                RawResponse = messageContent
-            };
-        }
-        catch (Exception ex)
-        {
-            return new LmStudioResponse
-            {
-                Success = false,
-                Error = $"JSON-Parse-Fehler: {ex.Message}",
-                RawResponse = messageContent
-            };
-        }
-    }
-
-    private string ExtractJson(string text)
-    {
-        text = text.Trim();
-        if (text.StartsWith("```json"))
-            text = text[7..];
-        else if (text.StartsWith("```"))
-            text = text[3..];
-
-        if (text.EndsWith("```"))
-            text = text[..^3];
-
-        var start = text.IndexOf('{');
-        var end = text.LastIndexOf('}');
-        if (start >= 0 && end > start)
-            return text[start..(end + 1)];
-
-        return text.Trim();
+                    Id = match.Id,
+                    CodeGroup = match.CodeGroup,
+                    Code = match.Code,
+                    Sentiment = match.Sentiment
+                })
+                .ToList(),
+            CodeGroupSentiments = parsed.CodeGroupSentiments
+                .Select(group => new AiCodeGroupSentiment
+                {
+                    CodeGroup = group.CodeGroup,
+                    Sentiment = group.Sentiment,
+                    MatchedCodeIds = group.MatchedCodeIds.ToList()
+                })
+                .ToList(),
+            RawResponse = parsed.RawResponse,
+            Error = parsed.ParseError
+        };
     }
 
     private async Task<string> SendChatCompletionAsync(
@@ -157,6 +127,7 @@ public class LmStudioClient : ILmStudioClient
                 new { role = "user", content = userPrompt }
             },
             temperature = _temperature,
+            response_format = new { type = "json_object" },
             stream = false
         };
 
@@ -174,6 +145,8 @@ public class LmStudioResponse
     public bool Success { get; set; }
     public string Sentiment { get; set; } = string.Empty;
     public List<KeywordResult> Keywords { get; set; } = new();
+    public List<AiCodeMatch> CodeMatches { get; set; } = new();
+    public List<AiCodeGroupSentiment> CodeGroupSentiments { get; set; } = new();
     public string RawResponse { get; set; } = string.Empty;
     public string? Error { get; set; }
 }

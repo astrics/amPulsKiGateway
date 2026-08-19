@@ -1,4 +1,4 @@
-﻿using AiGateway.CSS.Api.Configuration;
+using AiGateway.CSS.Api.Configuration;
 using AiGateway.CSS.Api.Middleware;
 using AiGateway.CSS.Api.Services;
 using Serilog;
@@ -29,6 +29,7 @@ builder.Services.AddSingleton<LmStudioConcurrencyGate>();
 builder.Services.AddSingleton<BatchJobProcessor>();
 builder.Services.AddSingleton<ResultFileWriter>();
 builder.Services.AddSingleton<ResultStore>();
+builder.Services.AddSingleton<CssCodebookPromptService>();
 
 builder.Services.Configure<GatewayOptions>(
     builder.Configuration.GetSection(GatewayOptions.SectionName));
@@ -100,6 +101,3 @@ var memoryService = app.Services.GetRequiredService<MemoryDiagnosticsService>();
 memoryService.WriteMemorySnapshot("Application Startup");
 
 app.Run();
-
-
-

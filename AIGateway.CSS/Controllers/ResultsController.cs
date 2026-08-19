@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using AiGateway.CSS.Api.Services;
 using AiGateway.CSS.Api.Models;
 
@@ -37,6 +37,19 @@ public class ResultsController : ControllerBase
                 text = r.Text,
                 sentiment = r.Sentiment,
                 keywords = r.Keywords.Select(k => new { k.Id, k.Label }),
+                code_matches = r.CodeMatches.Select(m => new
+                {
+                    id = m.Id,
+                    codeGroup = m.CodeGroup,
+                    code = m.Code,
+                    sentiment = m.Sentiment
+                }),
+                code_group_sentiments = r.CodeGroupSentiments.Select(g => new
+                {
+                    codeGroup = g.CodeGroup,
+                    sentiment = g.Sentiment,
+                    matchedCodeIds = g.MatchedCodeIds
+                }),
                 processing_ms = r.ProcessingMs,
                 processed_at = r.ProcessedAt,
                 error = r.Error,
@@ -45,5 +58,3 @@ public class ResultsController : ControllerBase
         });
     }
 }
-
-

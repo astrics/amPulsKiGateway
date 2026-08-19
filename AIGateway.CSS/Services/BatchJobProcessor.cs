@@ -1,4 +1,4 @@
-﻿using AiGateway.CSS.Api.Models;
+using AiGateway.CSS.Api.Models;
 using System.Diagnostics;
 
 namespace AiGateway.CSS.Api.Services;
@@ -61,6 +61,20 @@ public class BatchJobProcessor
                             Id = k.Id,
                             Label = k.Label
                         }).ToList();
+                        entry.CodeMatches = result.CodeMatches.Select(match => new AiCodeMatch
+                        {
+                            Id = match.Id,
+                            CodeGroup = match.CodeGroup,
+                            Code = match.Code,
+                            Sentiment = match.Sentiment
+                        }).ToList();
+                        entry.CodeGroupSentiments = result.CodeGroupSentiments.Select(group => new AiCodeGroupSentiment
+                        {
+                            CodeGroup = group.CodeGroup,
+                            Sentiment = group.Sentiment,
+                            MatchedCodeIds = group.MatchedCodeIds.ToList()
+                        }).ToList();
+                        entry.RawResponse = result.RawResponse;
                     }
                     else
                     {
@@ -120,4 +134,3 @@ public class BatchJobProcessor
         });
     }
 }
-

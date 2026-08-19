@@ -1,4 +1,4 @@
-﻿using AiGateway.CSS.Api.Models;
+using AiGateway.CSS.Api.Models;
 using System.Text.Json;
 
 namespace AiGateway.CSS.Api.Services;
@@ -38,9 +38,23 @@ public class ResultFileWriter
                     text = r.Text,
                     sentiment = r.Sentiment,
                     keywords = r.Keywords.Select(k => new { k.Id, k.Label }),
+                    code_matches = r.CodeMatches.Select(m => new
+                    {
+                        id = m.Id,
+                        code_group = m.CodeGroup,
+                        code = m.Code,
+                        sentiment = m.Sentiment
+                    }),
+                    code_group_sentiments = r.CodeGroupSentiments.Select(g => new
+                    {
+                        code_group = g.CodeGroup,
+                        sentiment = g.Sentiment,
+                        matched_code_ids = g.MatchedCodeIds
+                    }),
                     processing_ms = r.ProcessingMs,
                     processed_at = r.ProcessedAt.ToString("o"),
-                    error = r.Error
+                    error = r.Error,
+                    raw_response = r.RawResponse
                 })
             };
 
@@ -55,5 +69,3 @@ public class ResultFileWriter
         }
     }
 }
-
-

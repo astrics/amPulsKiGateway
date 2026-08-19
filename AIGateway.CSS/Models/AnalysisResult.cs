@@ -12,6 +12,8 @@ public class AnalysisResult
     public string? Statement { get; set; }
     public string? Sentiment { get; set; }
     public List<AiKeyword>? Keywords { get; set; }
+    public List<AiCodeMatch> CodeMatches { get; set; } = new();
+    public List<AiCodeGroupSentiment> CodeGroupSentiments { get; set; } = new();
     public string? RawResponse { get; set; }
     public string? ParseError { get; set; }
     public string? ErrorMessage { get; set; }

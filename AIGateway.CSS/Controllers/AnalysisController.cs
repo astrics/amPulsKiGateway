@@ -32,14 +32,15 @@ public class AnalysisController : ControllerBase
             return BadRequest(new { error = "Text darf nicht leer sein" });
 
         _logger.LogInformation(
-            "Analyse: Statement {Id}, ProjectId={ProjectId}, Dashboard={Dash}",
+            "Analyse: Statement {Id}, ProjectId={ProjectId}, Dashboard={Dash}, IgnoreCache={IgnoreCache}",
             request.StatementId,
             request.ProjectId,
-            request.Dashboard);
+            request.Dashboard,
+            request.IgnoreCache);
 
         try
         {
-            var cached = _store.FindByHash(request.TextHash, request.ProjectId);
+            var cached = request.IgnoreCache ? null : _store.FindByHash(request.TextHash, request.ProjectId);
             if (cached != null && cached.Status == "completed")
             {
                 _logger.LogInformation(
@@ -59,7 +60,9 @@ public class AnalysisController : ControllerBase
                     TextHash = request.TextHash,
                     Statement = cached.Statement,
                     Sentiment = cached.Sentiment,
-                    Keywords = cached.Keywords,
+                    Keywords = CloneKeywords(cached.Keywords),
+                    CodeMatches = CloneCodeMatches(cached.CodeMatches),
+                    CodeGroupSentiments = CloneCodeGroupSentiments(cached.CodeGroupSentiments),
                     RawResponse = cached.RawResponse,
                     ProcessingMs = 0,
                     Status = "completed",
@@ -79,6 +82,8 @@ public class AnalysisController : ControllerBase
                     statement = cachedResult.Statement,
                     sentiment = cachedResult.Sentiment,
                     keywords = cachedResult.Keywords,
+                    codeMatches = cachedResult.CodeMatches,
+                    codeGroupSentiments = cachedResult.CodeGroupSentiments,
                     processingMs = 0
                 });
             }
@@ -97,7 +102,9 @@ public class AnalysisController : ControllerBase
                 TextHash = request.TextHash,
                 Statement = aiResult.Statement,
                 Sentiment = aiResult.Sentiment,
-                Keywords = aiResult.Keywords,
+                Keywords = CloneKeywords(aiResult.Keywords),
+                CodeMatches = CloneCodeMatches(aiResult.CodeMatches),
+                CodeGroupSentiments = CloneCodeGroupSentiments(aiResult.CodeGroupSentiments),
                 RawResponse = aiResult.RawResponse,
                 ParseError = aiResult.ParseError,
                 ProcessingMs = processingMs,
@@ -123,6 +130,8 @@ public class AnalysisController : ControllerBase
                 statement = result.Statement,
                 sentiment = result.Sentiment,
                 keywords = result.Keywords,
+                codeMatches = result.CodeMatches,
+                codeGroupSentiments = result.CodeGroupSentiments,
                 rawResponse = result.RawResponse,
                 processingMs
             });
@@ -182,6 +191,8 @@ public class AnalysisController : ControllerBase
                 r.Statement,
                 r.Sentiment,
                 r.Keywords,
+                r.CodeMatches,
+                r.CodeGroupSentiments,
                 r.ProcessingMs,
                 r.CachedFrom,
                 r.AnalyzedAt
@@ -226,8 +237,35 @@ public class AnalysisController : ControllerBase
 
         var result = _store.GetResult(statementId, projectId);
         if (result == null)
-            return NotFound(new { status = "pending", message = "Ergebnis noch nicht verfügbar" });
+            return NotFound(new { status = "pending", message = "Ergebnis noch nicht verfuegbar" });
 
         return Ok(result);
+    }
+
+    private static List<AiKeyword> CloneKeywords(IEnumerable<AiKeyword>? source)
+    {
+        return source?.Select(keyword => new AiKeyword { Id = keyword.Id, Label = keyword.Label }).ToList()
+               ?? new List<AiKeyword>();
+    }
+
+    private static List<AiCodeMatch> CloneCodeMatches(IEnumerable<AiCodeMatch>? source)
+    {
+        return source?.Select(match => new AiCodeMatch
+        {
+            Id = match.Id,
+            CodeGroup = match.CodeGroup,
+            Code = match.Code,
+            Sentiment = match.Sentiment
+        }).ToList() ?? new List<AiCodeMatch>();
+    }
+
+    private static List<AiCodeGroupSentiment> CloneCodeGroupSentiments(IEnumerable<AiCodeGroupSentiment>? source)
+    {
+        return source?.Select(group => new AiCodeGroupSentiment
+        {
+            CodeGroup = group.CodeGroup,
+            Sentiment = group.Sentiment,
+            MatchedCodeIds = group.MatchedCodeIds.ToList()
+        }).ToList() ?? new List<AiCodeGroupSentiment>();
     }
 }

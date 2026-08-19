@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using AiGateway.CSS.Api.Models;
 
@@ -10,17 +10,20 @@ public class LmStudioService
     private readonly IConfiguration _config;
     private readonly ILogger<LmStudioService> _logger;
     private readonly LmStudioConcurrencyGate _concurrencyGate;
+    private readonly CssCodebookPromptService _promptService;
 
     public LmStudioService(
         HttpClient http,
         IConfiguration config,
         ILogger<LmStudioService> logger,
-        LmStudioConcurrencyGate concurrencyGate)
+        LmStudioConcurrencyGate concurrencyGate,
+        CssCodebookPromptService promptService)
     {
         _http = http;
         _config = config;
         _logger = logger;
         _concurrencyGate = concurrencyGate;
+        _promptService = promptService;
         _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
@@ -34,19 +37,19 @@ public class LmStudioService
             model,
             messages = new[]
             {
-                new { role = "system", content = PromptBuilder.GetSystemPrompt() },
-                new { role = "user", content = PromptBuilder.GetUserPrompt(text) }
+                new { role = "system", content = _promptService.GetSystemPrompt() },
+                new { role = "user", content = _promptService.BuildUserPrompt(text) }
             },
             temperature = 0.1,
-            max_tokens = 500,
-            response_format = new { type = "text" }
+            max_tokens = 1200,
+            response_format = new { type = "json_object" }
         };
 
         var json = JsonSerializer.Serialize(payload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         _logger.LogInformation(
-            "LM Studio Request | Url: {Url} | Model: {Model} | Text-LÃ¤nge: {Len} | Payload: {Payload}",
+            "LM Studio Request | Url: {Url} | Model: {Model} | Text-Laenge: {Len} | Payload: {Payload}",
             $"{baseUrl}/v1/chat/completions",
             model,
             text.Length,
@@ -64,7 +67,7 @@ public class LmStudioService
             responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             _logger.LogInformation(
-                "LM Studio Response | Status: {Status} | Dauer: {Ms}ms | Body-LÃ¤nge: {Len} | Body: {Body}",
+                "LM Studio Response | Status: {Status} | Dauer: {Ms}ms | Body-Laenge: {Len} | Body: {Body}",
                 (int)response.StatusCode,
                 sw.ElapsedMilliseconds,
                 responseBody.Length,
@@ -106,97 +109,8 @@ public class LmStudioService
                 $"LM Studio HTTP {(int)response.StatusCode}: {responseBody[..Math.Min(200, responseBody.Length)]}");
         }
 
-        return ParseLmStudioResponse(responseBody);
-    }
-
-    private static string StripMarkdownCodeBlock(string text)
-    {
-        text = text.Trim();
-        if (text.StartsWith("```"))
-        {
-            var firstNewline = text.IndexOf('\n');
-            if (firstNewline > 0)
-                text = text[(firstNewline + 1)..];
-
-            if (text.TrimEnd().EndsWith("```"))
-                text = text.TrimEnd()[..^3];
-        }
-
-        return text.Trim();
-    }
-
-    private AiResult ParseLmStudioResponse(string responseBody)
-    {
-        try
-        {
-            var root = JsonSerializer.Deserialize<JsonElement>(responseBody);
-            var contentStr = root
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString() ?? "{}";
-
-            _logger.LogInformation("LM Studio Content: {Content}", contentStr[..Math.Min(500, contentStr.Length)]);
-
-            contentStr = StripMarkdownCodeBlock(contentStr);
-            var content = JsonSerializer.Deserialize<JsonElement>(contentStr);
-
-            var sentiment = content.TryGetProperty("sentiment", out var s)
-                ? NormalizeSentiment(s.GetString() ?? "")
-                : "Neutral";
-
-            var keywords = new List<AiKeyword>();
-            if (content.TryGetProperty("keywords", out var kw) && kw.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in kw.EnumerateArray())
-                {
-                    var id = item.TryGetProperty("id", out var idProp) ? idProp.GetInt32() : 0;
-                    var label = item.TryGetProperty("label", out var lblProp) ? lblProp.GetString() ?? "" : "";
-                    if (id > 0 && !string.IsNullOrEmpty(label))
-                    {
-                        keywords.Add(new AiKeyword { Id = id, Label = label });
-                    }
-                }
-            }
-
-            var statement = content.TryGetProperty("statement", out var stmt)
-                ? stmt.GetString() ?? ""
-                : "";
-
-            return new AiResult
-            {
-                Statement = statement,
-                Sentiment = sentiment,
-                Keywords = keywords,
-                RawResponse = contentStr
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                "Parse-Fehler: {Error}. Raw: {Raw}",
-                ex.Message,
-                responseBody[..Math.Min(500, responseBody.Length)]);
-
-            return new AiResult
-            {
-                Sentiment = "Neutral",
-                Keywords = new List<AiKeyword>(),
-                RawResponse = responseBody[..Math.Min(5000, responseBody.Length)],
-                ParseError = ex.Message
-            };
-        }
-    }
-
-    private static string NormalizeSentiment(string raw)
-    {
-        var lower = raw.ToLower().Trim();
-        return lower switch
-        {
-            "positiv" or "positive" or "pos" => "Positiv",
-            "negativ" or "negative" or "neg" => "Negativ",
-            "neutral" => "Neutral",
-            _ => "Neutral"
-        };
+        var result = CssAiResponseParser.ParseCompletionResponse(responseBody, _logger);
+        _promptService.NormalizeResult(result);
+        return result;
     }
 }
