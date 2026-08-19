@@ -77,11 +77,21 @@ public static class CssAiResponseParser
 
         foreach (var item in keywordElement.EnumerateArray())
         {
-            var id = ReadInt(item, "id", "Id", "number");
-            var label = ReadString(item, "label", "Label", "code", "name");
-            if (id > 0)
+            if (item.ValueKind == JsonValueKind.String)
             {
-                keywords.Add(new AiKeyword { Id = id, Label = label });
+                var label = item.GetString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(label))
+                {
+                    keywords.Add(new AiKeyword { Id = 0, Label = label });
+                }
+                continue;
+            }
+
+            var id = ReadInt(item, "id", "Id", "number");
+            var labelValue = ReadString(item, "label", "Label", "code", "name");
+            if (id > 0 || !string.IsNullOrWhiteSpace(labelValue))
+            {
+                keywords.Add(new AiKeyword { Id = id, Label = labelValue });
             }
         }
 
@@ -98,6 +108,27 @@ public static class CssAiResponseParser
 
         foreach (var item in matchElement.EnumerateArray())
         {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var codeText = item.GetString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(codeText))
+                {
+                    matches.Add(new AiCodeMatch
+                    {
+                        Id = 0,
+                        Code = codeText,
+                        Sentiment = string.Empty,
+                        CodeGroup = string.Empty
+                    });
+                }
+                continue;
+            }
+
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
             var id = ReadInt(item, "id", "Id", "number");
             var codeGroup = ReadString(item, "codeGroup", "code_group", "group");
             var code = ReadString(item, "code", "label", "name");
@@ -128,6 +159,26 @@ public static class CssAiResponseParser
 
         foreach (var item in groupElement.EnumerateArray())
         {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var rawGroup = item.GetString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(rawGroup))
+                {
+                    groups.Add(new AiCodeGroupSentiment
+                    {
+                        CodeGroup = rawGroup,
+                        Sentiment = string.Empty,
+                        MatchedCodeIds = new List<int>()
+                    });
+                }
+                continue;
+            }
+
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
             var matchedCodeIds = new List<int>();
             if (TryGetProperty(item, out var idsElement, "matchedCodeIds", "matched_code_ids", "codeIds", "code_ids") && idsElement.ValueKind == JsonValueKind.Array)
             {
@@ -140,7 +191,7 @@ public static class CssAiResponseParser
                 }
             }
 
-            var codeGroup = ReadString(item, "codeGroup", "code_group", "group");
+            var codeGroup = ReadString(item, "codeGroup", "code_group", "group", "code", "label", "name");
             if (!string.IsNullOrWhiteSpace(codeGroup))
             {
                 groups.Add(new AiCodeGroupSentiment
@@ -194,6 +245,12 @@ public static class CssAiResponseParser
 
     private static bool TryGetProperty(JsonElement element, out JsonElement value, params string[] names)
     {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            value = default;
+            return false;
+        }
+
         foreach (var property in element.EnumerateObject())
         {
             if (names.Any(name => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)))
