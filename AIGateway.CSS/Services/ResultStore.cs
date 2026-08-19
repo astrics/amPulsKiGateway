@@ -8,7 +8,7 @@ public class ResultStore
 {
     private readonly string _basePath;
     private readonly ILogger<ResultStore> _logger;
-    private readonly ConcurrentDictionary<int, AnalysisResult> _resultCache = new();
+    private readonly ConcurrentDictionary<string, AnalysisResult> _resultCache = new();
     private readonly ConcurrentDictionary<string, AnalysisResult> _hashCache = new();
 
     public ResultStore(IConfiguration config, ILogger<ResultStore> logger)
@@ -20,20 +20,20 @@ public class ResultStore
         LoadExistingResults();
     }
 
-    public AnalysisResult? FindByHash(string textHash)
+    public AnalysisResult? FindByHash(string textHash, int? projectId = null)
     {
         if (string.IsNullOrEmpty(textHash))
             return null;
 
-        _hashCache.TryGetValue(textHash, out var cached);
+        _hashCache.TryGetValue(BuildHashKey(textHash, projectId), out var cached);
         return cached;
     }
 
     public async Task SaveResult(AnalysisResult result)
     {
-        _resultCache[result.StatementId] = result;
+        _resultCache[BuildResultKey(result.StatementId, result.ProjectId)] = result;
         if (!string.IsNullOrEmpty(result.TextHash))
-            _hashCache[result.TextHash] = result;
+            _hashCache[BuildHashKey(result.TextHash, result.ProjectId)] = result;
 
         var dashPath = Path.Combine(_basePath, SanitizePath(result.Dashboard));
         Directory.CreateDirectory(dashPath);
@@ -46,21 +46,35 @@ public class ResultStore
         });
         await File.WriteAllTextAsync(filePath, json);
 
-        await UpdateDashboardSummary(result.Dashboard);
+        await UpdateDashboardSummary(result.Dashboard, result.ProjectId);
 
-        _logger.LogInformation("Gespeichert: {File}", filePath);
+        _logger.LogInformation(
+            "Gespeichert: {File} | ProjectId={ProjectId}",
+            filePath,
+            result.ProjectId?.ToString() ?? "null");
     }
 
-    public AnalysisResult? GetResult(int statementId)
+    public AnalysisResult? GetResult(int statementId, int? projectId = null)
     {
-        _resultCache.TryGetValue(statementId, out var result);
-        return result;
+        if (projectId.HasValue && _resultCache.TryGetValue(BuildResultKey(statementId, projectId), out var exactResult))
+        {
+            return exactResult;
+        }
+
+        return _resultCache.Values
+            .Where(r => r.StatementId == statementId)
+            .Where(r => !projectId.HasValue || r.ProjectId == projectId)
+            .OrderByDescending(r => r.AnalyzedAt)
+            .FirstOrDefault();
     }
 
-    public List<AnalysisResult> GetResults(string dashboard, int? sinceId = null)
+    public List<AnalysisResult> GetResults(string dashboard, int? projectId = null, int? sinceId = null)
     {
         var query = _resultCache.Values
             .Where(r => r.Dashboard.Equals(dashboard, StringComparison.OrdinalIgnoreCase));
+
+        if (projectId.HasValue)
+            query = query.Where(r => r.ProjectId == projectId);
 
         if (sinceId.HasValue)
             query = query.Where(r => r.StatementId > sinceId.Value);
@@ -68,31 +82,50 @@ public class ResultStore
         return query.OrderBy(r => r.StatementId).ToList();
     }
 
-    public List<AnalysisResult> GetAllResults()
+    public List<AnalysisResult> GetAllResults(int? projectId = null)
     {
-        return _resultCache.Values.OrderBy(r => r.StatementId).ToList();
+        var query = _resultCache.Values.AsEnumerable();
+
+        if (projectId.HasValue)
+            query = query.Where(r => r.ProjectId == projectId);
+
+        return query.OrderBy(r => r.StatementId).ToList();
     }
 
-    public int GetTotalCount() => _resultCache.Count;
-
-    public Dictionary<string, int> GetStats()
+    public int GetTotalCount(int? projectId = null)
     {
-        return _resultCache.Values
+        return projectId.HasValue
+            ? _resultCache.Values.Count(r => r.ProjectId == projectId)
+            : _resultCache.Count;
+    }
+
+    public Dictionary<string, int> GetStats(int? projectId = null)
+    {
+        var query = _resultCache.Values.AsEnumerable();
+
+        if (projectId.HasValue)
+            query = query.Where(r => r.ProjectId == projectId);
+
+        return query
             .GroupBy(r => r.Status ?? "unknown")
             .ToDictionary(g => g.Key, g => g.Count());
     }
 
-    private async Task UpdateDashboardSummary(string dashboard)
+    private async Task UpdateDashboardSummary(string dashboard, int? projectId)
     {
         try
         {
-            var results = GetResults(dashboard);
+            var results = GetResults(dashboard, projectId);
             var dashPath = Path.Combine(_basePath, SanitizePath(dashboard));
-            var summaryPath = Path.Combine(dashPath, "_summary.json");
+            var summaryFileName = projectId.HasValue
+                ? $"_summary_project_{projectId.Value}.json"
+                : "_summary.json";
+            var summaryPath = Path.Combine(dashPath, summaryFileName);
 
             var summary = new
             {
                 dashboard,
+                projectId,
                 updatedAt = DateTime.UtcNow,
                 totalCount = results.Count,
                 sentimentStats = new
@@ -140,9 +173,9 @@ public class ResultStore
                 var result = JsonSerializer.Deserialize<AnalysisResult>(json);
                 if (result != null)
                 {
-                    _resultCache[result.StatementId] = result;
+                    _resultCache[BuildResultKey(result.StatementId, result.ProjectId)] = result;
                     if (!string.IsNullOrEmpty(result.TextHash))
-                        _hashCache[result.TextHash] = result;
+                        _hashCache[BuildHashKey(result.TextHash, result.ProjectId)] = result;
                     loaded++;
                 }
             }
@@ -153,6 +186,21 @@ public class ResultStore
         }
 
         _logger.LogInformation("{Count} bestehende Ergebnisse aus JSON geladen", loaded);
+    }
+
+    private static string BuildResultKey(int statementId, int? projectId)
+    {
+        return $"{NormalizeProjectKey(projectId)}::{statementId}";
+    }
+
+    private static string BuildHashKey(string textHash, int? projectId)
+    {
+        return $"{NormalizeProjectKey(projectId)}::{textHash}";
+    }
+
+    private static string NormalizeProjectKey(int? projectId)
+    {
+        return projectId.HasValue ? $"project_{projectId.Value}" : "project_none";
     }
 
     private static string SanitizePath(string input)

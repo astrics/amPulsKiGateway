@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using AiGateway.CSS.Api.Models;
 
@@ -9,12 +9,18 @@ public class LmStudioService
     private readonly HttpClient _http;
     private readonly IConfiguration _config;
     private readonly ILogger<LmStudioService> _logger;
+    private readonly LmStudioConcurrencyGate _concurrencyGate;
 
-    public LmStudioService(HttpClient http, IConfiguration config, ILogger<LmStudioService> logger)
+    public LmStudioService(
+        HttpClient http,
+        IConfiguration config,
+        ILogger<LmStudioService> logger,
+        LmStudioConcurrencyGate concurrencyGate)
     {
         _http = http;
         _config = config;
         _logger = logger;
+        _concurrencyGate = concurrencyGate;
         _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
@@ -40,7 +46,7 @@ public class LmStudioService
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         _logger.LogInformation(
-            "LM Studio Request | Url: {Url} | Model: {Model} | Text-Länge: {Len} | Payload: {Payload}",
+            "LM Studio Request | Url: {Url} | Model: {Model} | Text-LÃ¤nge: {Len} | Payload: {Payload}",
             $"{baseUrl}/v1/chat/completions",
             model,
             text.Length,
@@ -51,13 +57,14 @@ public class LmStudioService
 
         try
         {
+            using var lease = await _concurrencyGate.EnterAsync(cancellationToken);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             response = await _http.PostAsync($"{baseUrl}/v1/chat/completions", content, cancellationToken);
             sw.Stop();
             responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             _logger.LogInformation(
-                "LM Studio Response | Status: {Status} | Dauer: {Ms}ms | Body-Länge: {Len} | Body: {Body}",
+                "LM Studio Response | Status: {Status} | Dauer: {Ms}ms | Body-LÃ¤nge: {Len} | Body: {Body}",
                 (int)response.StatusCode,
                 sw.ElapsedMilliseconds,
                 responseBody.Length,

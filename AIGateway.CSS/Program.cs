@@ -25,6 +25,7 @@ builder.Services.AddHttpClient<ILmStudioClient, LmStudioClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(300);
 });
 builder.Services.AddHttpClient<LmStudioService>();
+builder.Services.AddSingleton<LmStudioConcurrencyGate>();
 builder.Services.AddSingleton<BatchJobProcessor>();
 builder.Services.AddSingleton<ResultFileWriter>();
 builder.Services.AddSingleton<ResultStore>();
@@ -99,4 +100,6 @@ var memoryService = app.Services.GetRequiredService<MemoryDiagnosticsService>();
 memoryService.WriteMemorySnapshot("Application Startup");
 
 app.Run();
+
+
 
