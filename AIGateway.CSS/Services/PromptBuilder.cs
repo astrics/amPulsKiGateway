@@ -7,6 +7,8 @@ namespace AiGateway.CSS.Api.Services;
 
 public sealed class CssCodebookPromptService
 {
+    private const string BaselinePromptVariant = "baseline";
+    private const string CompactPromptVariant = "compact_v1";
     private const string SinglePassMode = "single_pass";
     private const string TwoStageMode = "two_stage";
 
@@ -15,6 +17,7 @@ public sealed class CssCodebookPromptService
     private readonly Dictionary<string, List<CssCodebookLabel>> _labelsByGroup;
     private readonly Dictionary<string, string> _groupAliases;
     private readonly string _classificationMode;
+    private readonly string _promptVariant;
     private readonly int _maxCodeGroupsPerStatement;
     private readonly int _maxCodingRuleLength;
     private readonly int _maxExampleLength;
@@ -27,9 +30,10 @@ public sealed class CssCodebookPromptService
         _logger = logger;
         _codebook = LoadCodebook(config);
         _classificationMode = NormalizeMode(config["CssCodebook:ClassificationMode"]);
+        _promptVariant = NormalizePromptVariant(config["CssCodebook:PromptVariant"]);
         _maxCodeGroupsPerStatement = Math.Max(1, config.GetValue<int?>("CssCodebook:MaxCodeGroupsPerStatement") ?? 3);
-        _maxCodingRuleLength = Math.Max(120, config.GetValue<int?>("CssCodebook:MaxCodingRuleLength") ?? 280);
-        _maxExampleLength = Math.Max(80, config.GetValue<int?>("CssCodebook:MaxExampleLength") ?? 180);
+        _maxCodingRuleLength = Math.Max(80, config.GetValue<int?>("CssCodebook:MaxCodingRuleLength") ?? GetDefaultCodingRuleLength(_promptVariant));
+        _maxExampleLength = Math.Max(40, config.GetValue<int?>("CssCodebook:MaxExampleLength") ?? GetDefaultExampleLength(_promptVariant));
 
         _labelsById = _codebook.Labels
             .Where(label => label.Number > 0)
@@ -50,13 +54,17 @@ public sealed class CssCodebookPromptService
         _codeGroupSystemPrompt = BuildCodeGroupSystemPrompt();
 
         _logger.LogInformation(
-            "CSS-Codebook geladen: {Count} Codes in {Groups} Codegruppen | Strategie: {Mode}",
+            "CSS-Codebook geladen: {Count} Codes in {Groups} Codegruppen | Strategie: {Mode} | PromptVariante: {Variant} | RegelLaenge: {RuleLength} | BeispielLaenge: {ExampleLength}",
             _codebook.Labels.Count,
             _labelsByGroup.Count,
-            _classificationMode);
+            _classificationMode,
+            _promptVariant,
+            _maxCodingRuleLength,
+            _maxExampleLength);
     }
 
     public string ClassificationMode => _classificationMode;
+    public string PromptVariant => _promptVariant;
 
     public bool UsesTwoStageClassification => string.Equals(_classificationMode, TwoStageMode, StringComparison.OrdinalIgnoreCase);
 
@@ -118,9 +126,9 @@ public sealed class CssCodebookPromptService
                 builder.AppendLine($"- ID {label.Number}: {label.Code}");
                 if (!string.IsNullOrWhiteSpace(label.CodingRule))
                 {
-                    builder.AppendLine($"  Codierregel: {Condense(label.CodingRule, _maxCodingRuleLength)}");
+                    builder.AppendLine($"  Hinweis: {Condense(label.CodingRule, _maxCodingRuleLength)}");
                 }
-                if (!string.IsNullOrWhiteSpace(label.ExampleText))
+                if (!IsCompactPromptVariant && !string.IsNullOrWhiteSpace(label.ExampleText))
                 {
                     builder.AppendLine($"  Beispiele: {Condense(label.ExampleText, _maxExampleLength)}");
                 }
@@ -417,9 +425,9 @@ public sealed class CssCodebookPromptService
                 builder.AppendLine($"- ID {label.Number}: {label.Code}");
                 if (!string.IsNullOrWhiteSpace(label.CodingRule))
                 {
-                    builder.AppendLine($"  Codierregel: {Condense(label.CodingRule, _maxCodingRuleLength)}");
+                    builder.AppendLine($"  Hinweis: {Condense(label.CodingRule, _maxCodingRuleLength)}");
                 }
-                if (!string.IsNullOrWhiteSpace(label.ExampleText))
+                if (!IsCompactPromptVariant && !string.IsNullOrWhiteSpace(label.ExampleText))
                 {
                     builder.AppendLine($"  Beispiele: {Condense(label.ExampleText, _maxExampleLength)}");
                 }
@@ -457,17 +465,22 @@ public sealed class CssCodebookPromptService
         foreach (var group in _labelsByGroup)
         {
             var topics = string.Join(" | ", group.Value.Select(label => label.Code));
-            var codingHints = string.Join(" ", group.Value.Select(label => label.CodingRule).Where(rule => !string.IsNullOrWhiteSpace(rule)).Take(2));
+            var codingHints = string.Join(
+                " ",
+                group.Value
+                    .Select(label => label.CodingRule)
+                    .Where(rule => !string.IsNullOrWhiteSpace(rule))
+                    .Take(IsCompactPromptVariant ? 1 : 2));
             var examples = string.Join(" ", group.Value.Select(label => label.ExampleText).Where(example => !string.IsNullOrWhiteSpace(example)).Take(1));
 
-            builder.AppendLine($"- {group.Key}: Themen {Condense(topics, 220)}");
+            builder.AppendLine($"- {group.Key}: Themen {Condense(topics, IsCompactPromptVariant ? 160 : 220)}");
             if (!string.IsNullOrWhiteSpace(codingHints))
             {
-                builder.AppendLine($"  Hinweise: {Condense(codingHints, 260)}");
+                builder.AppendLine($"  Hinweise: {Condense(codingHints, IsCompactPromptVariant ? 160 : 260)}");
             }
-            if (!string.IsNullOrWhiteSpace(examples))
+            if (!IsCompactPromptVariant && !string.IsNullOrWhiteSpace(examples))
             {
-                builder.AppendLine($"  Beispiel: {Condense(examples, 180)}");
+                builder.AppendLine($"  Beispiel: {Condense(examples, _maxExampleLength)}");
             }
         }
 
@@ -661,6 +674,30 @@ public sealed class CssCodebookPromptService
         }
 
         return builder.ToString();
+    }
+
+    private bool IsCompactPromptVariant =>
+        string.Equals(_promptVariant, CompactPromptVariant, StringComparison.OrdinalIgnoreCase);
+
+    private static int GetDefaultCodingRuleLength(string promptVariant)
+    {
+        return string.Equals(promptVariant, CompactPromptVariant, StringComparison.OrdinalIgnoreCase)
+            ? 140
+            : 280;
+    }
+
+    private static int GetDefaultExampleLength(string promptVariant)
+    {
+        return string.Equals(promptVariant, CompactPromptVariant, StringComparison.OrdinalIgnoreCase)
+            ? 80
+            : 180;
+    }
+
+    private static string NormalizePromptVariant(string? rawPromptVariant)
+    {
+        return string.Equals(rawPromptVariant?.Trim(), CompactPromptVariant, StringComparison.OrdinalIgnoreCase)
+            ? CompactPromptVariant
+            : BaselinePromptVariant;
     }
 
     private static string NormalizeMode(string? rawMode)
