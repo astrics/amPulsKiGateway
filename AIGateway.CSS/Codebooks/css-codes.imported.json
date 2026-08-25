@@ -1,16 +1,16 @@
 {
   "project": "CSS",
-  "sourceDocument": "C:\\Users\\ls\\Nextcloud\\astrics\\myfeedback\\AmPuls\\KI\\Codeliste.docx",
-  "description": "Import der Codeliste aus Word. Laufzeitseitig sollte kuenftig diese strukturierte Datei genutzt werden.",
-  "version": "1.0.0",
-  "labelCount": 35,
+  "sourceDocument": "C:\\Users\\ls\\Nextcloud\\astrics\\myfeedback\\AmPuls\\KI\\Css\\Codierleitfaden_für WT_mit Beispielen.docx",
+  "description": "Import der CSS-Codeliste aus Word inklusive Nummer, Codegruppe, Code, Beispiel und Codierregel.",
+  "version": "2026-08-25",
+  "labelCount": 38,
   "labels": [
     {
       "number": 1,
       "codeGroup": "Mitarbeiter",
       "code": "Motivation & Engagement / Eingehen auf den Kunden",
       "exampleText": "Der MA war sehr bemüht uns weiterzuhelfen; hilfsbereit, zuvorkommend, ist auf meine Bedürfnisse eingegangen; verständnisvoll, aufmerksam Der MA hat sich für mich Zeit genommen, hat mich ernstgenommen, hat mich nicht unter Druck gesetzt, „verfügbar“ =für mich da, loyal, kooperativ, enthusiastisch, kompatibel, vereinbar, Negativ: Fam. Mitglieder erhalten keine Auskunft, belächelt, Beratung war im Nachhinein nicht notwendig",
-      "codingRule": "Aussagen, welche sich auf ein motiviertes und/oder engagiertes Verhalten des Mitarbeiters beziehen / Hilfsbereitschaft /Extraengagement/-meile Aussagen, welche sich auf eine persönliche, individuelle Betreuung beziehen resp. wenn auf die persönlichen Bedürfnisse eingegangen wird. „ganz persönlich“ / spricht die Sprache des Kunden/ im Sinne des Kunden/ in Ruhe/ruhig erklärt, geduldig, verständnisvoll."
+      "codingRule": "Aussagen, welche sich auf ein motiviertes und/oder engagiertes Verhalten des Mitarbeiters beziehen / Hilfsbereitschaft /Extraengagement/-meile Aussagen, welche sich auf eine persönliche, individuelle Betreuung beziehen resp. wenn auf die persönlichen Bedürfnisse eingegangen wird. „ganz persönlich“ / spricht die Sprache des Kunden/ im Sinne des Kunden/ in Ruhe/ruhig erklärt, geduldig, verständnisvoll. Falls Service allgemein erwähnt (Code 38)"
     },
     {
       "number": 2,
@@ -38,7 +38,7 @@
       "codeGroup": "Mitarbeiter",
       "code": "Unkomplizierte Lösung",
       "exampleText": "Es gab ein hin und her, sehr aufwändig / umständlich, alles in einem (nicht mehre Kanäle zum Kunden) Allg. Aussagen die von komplizierten Prozessen der Krankenversicherung handeln, Wechsel der Kommunikationswege (E-Mail / Brief) Aber: Sofort, speditiv = Code 15",
-      "codingRule": "Aussagen zur (un)komplizierten Lösung (muss vom Kunden explizit erwähnt werden) Abschluss war einfach, simpel, reibungslos, effizient, lösungsorientiert, zielführend Anliegen wurde unkompliziert behandelt."
+      "codingRule": "Aussagen zur (un)komplizierten Lösung (muss vom Kunden explizit erwähnt werden) Abschluss war einfach, simpel, reibungslos, effizient, lösungsorientiert, zielführend Anliegen wurde unkompliziert behandelt. Falls explizit die Einfachheit/Unkompliziertheit vom Rückfoderungs-/Leistungsprozess erwähnt wird -->Code 36"
     },
     {
       "number": 6,
@@ -66,7 +66,7 @@
       "codeGroup": "Produkt",
       "code": "Verständlichkeit / Übersichtlichkeit / Qualität des Produktangebots",
       "exampleText": "",
-      "codingRule": "Aussagen zur Verständlichkeit/Klarheit und Übersichtlichkeit des Produktangebots Aussagen zum Produkt, welche sich auf die Flexibilität / Individualität der Lösungsmöglichkeiten beziehen, welche die Produkte / Services betreffen, generelle Aussagen wie „gute Produkte“ etc."
+      "codingRule": "Aussagen zur Verständlichkeit/Klarheit und Übersichtlichkeit des Produktangebots Aussagen zu einem spezifischen Produkt (z.B. Alternativ, Zusatzversicherung, Zahnversicherung etc.), welche sich auf die Flexibilität / Individualität der Lösungsmöglichkeiten beziehen, welche die Produkte / Services betreffen, generelle Aussagen wie „gute Produkte“ etc. Aussagen zu alternativen Versicherungsmodellen (Telmed, HMO, Gruppenpraxis, Multimed, Hausarztmodell) unter Code12"
     },
     {
       "number": 10,
@@ -249,6 +249,27 @@
       "code": "Unklare Beschreibung / unbrauchbarer Kommentar",
       "exampleText": "Ich hatte eine Frage zur Rechnung; Ich habe die Hotline angerufen 100% zufrieden gibt es nicht, man kann sich immer verbessern, ich gebe nie die Höchstnote Keine Probleme = Code 33",
       "codingRule": "Aussagen, welche für die Analyse nicht brauchbar sind / Alles was für die Fragestellung nicht relevant ist. .z.B. wenn der Kunde nur sein Anliegen beschreibt"
+    },
+    {
+      "number": 36,
+      "codeGroup": "Leistungsbezug",
+      "code": "(Einfache / (un)komplizierte) Rückforderung",
+      "exampleText": "Einfache Rückforderung / Leistungen können unkompliziert rückerstattet werden / Rückforderung zu umständlich",
+      "codingRule": "Aussagen, die sich auf den Rückforderungsprozess von Leistungen beziehen"
+    },
+    {
+      "number": 37,
+      "codeGroup": "Leistungsbezug",
+      "code": "Leistungen allgemein",
+      "exampleText": "Falls nur „Gute/schlechte“ Leistungen erwähnt werden",
+      "codingRule": "Unspezifische Aussagen zu den Leistungen (gut/schlecht). Sobald es aber um die (nicht)Übernahme geht -->Code 18!"
+    },
+    {
+      "number": 38,
+      "codeGroup": "Kundenbetreuung",
+      "code": "Service allgemein",
+      "exampleText": "Guter / Schlechter Service / Kundenservice. Guter Kundendienst. Gut betreut.",
+      "codingRule": "Falls nur der Service allgemein referenziert wird. Falls Kundenorientierung / Kundenfreundlichkeit erwähnt --> Code 1."
     }
   ]
 }
