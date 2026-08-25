@@ -32,11 +32,12 @@ public class AnalysisController : ControllerBase
             return BadRequest(new { error = "Text darf nicht leer sein" });
 
         _logger.LogInformation(
-            "Analyse: Statement {Id}, ProjectId={ProjectId}, Dashboard={Dash}, IgnoreCache={IgnoreCache}",
+            "Analyse: Statement {Id}, ProjectId={ProjectId}, Dashboard={Dash}, IgnoreCache={IgnoreCache}, Kundenzufriedenheit={Score}",
             request.StatementId,
             request.ProjectId,
             request.Dashboard,
-            request.IgnoreCache);
+            request.IgnoreCache,
+            request.CustomerSatisfactionScore);
 
         try
         {
@@ -79,6 +80,7 @@ public class AnalysisController : ControllerBase
                     status = "completed",
                     cached = true,
                     cachedFrom = cached.StatementId,
+                    customerSatisfactionScore = request.CustomerSatisfactionScore,
                     statement = cachedResult.Statement,
                     sentiment = cachedResult.Sentiment,
                     keywords = cachedResult.Keywords,
@@ -89,7 +91,7 @@ public class AnalysisController : ControllerBase
             }
 
             var startTime = DateTime.UtcNow;
-            var aiResult = await _lmStudio.AnalyzeSync(request.Text, CancellationToken.None);
+            var aiResult = await _lmStudio.AnalyzeSync(request.Text, request.CustomerSatisfactionScore, CancellationToken.None);
             var processingMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
 
             var result = new AnalysisResult
@@ -127,6 +129,7 @@ public class AnalysisController : ControllerBase
                 projectId = result.ProjectId,
                 status = "completed",
                 cached = false,
+                customerSatisfactionScore = request.CustomerSatisfactionScore,
                 statement = result.Statement,
                 sentiment = result.Sentiment,
                 keywords = result.Keywords,
@@ -168,6 +171,7 @@ public class AnalysisController : ControllerBase
                 statementId = request.StatementId,
                 projectId = request.ProjectId,
                 status = "error",
+                customerSatisfactionScore = request.CustomerSatisfactionScore,
                 error = ex.Message
             });
         }

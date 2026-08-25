@@ -26,20 +26,23 @@ public class LmStudioService
         _promptService = promptService;
     }
 
-    public async Task<AiResult> AnalyzeSync(string text, CancellationToken cancellationToken = default)
+    public async Task<AiResult> AnalyzeSync(string text, int? customerSatisfactionScore = null, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("CSS-Klassifizierungsstrategie: {Mode}", _promptService.ClassificationMode);
+        _logger.LogInformation(
+            "CSS-Klassifizierungsstrategie: {Mode} | Kundenzufriedenheit={Score}",
+            _promptService.ClassificationMode,
+            customerSatisfactionScore);
 
         return _promptService.UsesTwoStageClassification
-            ? await AnalyzeTwoStageAsync(text, cancellationToken)
-            : await AnalyzeSinglePassAsync(text, cancellationToken);
+            ? await AnalyzeTwoStageAsync(text, customerSatisfactionScore, cancellationToken)
+            : await AnalyzeSinglePassAsync(text, customerSatisfactionScore, cancellationToken);
     }
 
-    private async Task<AiResult> AnalyzeSinglePassAsync(string text, CancellationToken cancellationToken)
+    private async Task<AiResult> AnalyzeSinglePassAsync(string text, int? customerSatisfactionScore, CancellationToken cancellationToken)
     {
         var responseBody = await SendChatCompletionAsync(
             _promptService.GetSystemPrompt(),
-            _promptService.BuildUserPrompt(text),
+            _promptService.BuildUserPrompt(text, customerSatisfactionScore),
             1200,
             "single_pass",
             cancellationToken);
@@ -50,11 +53,11 @@ public class LmStudioService
         return result;
     }
 
-    private async Task<AiResult> AnalyzeTwoStageAsync(string text, CancellationToken cancellationToken)
+    private async Task<AiResult> AnalyzeTwoStageAsync(string text, int? customerSatisfactionScore, CancellationToken cancellationToken)
     {
         var preselectionResponse = await SendChatCompletionAsync(
             _promptService.GetCodeGroupSystemPrompt(),
-            _promptService.BuildCodeGroupUserPrompt(text),
+            _promptService.BuildCodeGroupUserPrompt(text, customerSatisfactionScore),
             450,
             "codegroup_preselection",
             cancellationToken);
@@ -76,12 +79,12 @@ public class LmStudioService
             _logger.LogWarning(
                 "CSS-Codegruppen-Vorselektion leer. Fallback auf single_pass fuer die Aussage: {Preview}",
                 text[..Math.Min(160, text.Length)]);
-            return await AnalyzeSinglePassAsync(text, cancellationToken);
+            return await AnalyzeSinglePassAsync(text, customerSatisfactionScore, cancellationToken);
         }
 
         var finalResponse = await SendChatCompletionAsync(
             _promptService.BuildCodeSelectionSystemPrompt(selectedGroups),
-            _promptService.BuildCodeSelectionUserPrompt(text, preselection.CodeGroupSentiments),
+            _promptService.BuildCodeSelectionUserPrompt(text, preselection.CodeGroupSentiments, customerSatisfactionScore),
             900,
             "code_selection",
             cancellationToken);

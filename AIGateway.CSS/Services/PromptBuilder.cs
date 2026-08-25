@@ -70,20 +70,22 @@ public sealed class CssCodebookPromptService
 
     public string GetSystemPrompt() => _singlePassSystemPrompt;
 
-    public string BuildUserPrompt(string statementText)
+    public string BuildUserPrompt(string statementText, int? customerSatisfactionScore = null)
     {
         return BuildStatementPrompt(
             "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme die passenden Codes.",
-            statementText);
+            statementText,
+            customerSatisfactionScore);
     }
 
     public string GetCodeGroupSystemPrompt() => _codeGroupSystemPrompt;
 
-    public string BuildCodeGroupUserPrompt(string statementText)
+    public string BuildCodeGroupUserPrompt(string statementText, int? customerSatisfactionScore = null)
     {
         return BuildStatementPrompt(
             "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen. Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein. Ordne nach Bedeutung, nicht nach Sprache, zu.",
-            statementText);
+            statementText,
+            customerSatisfactionScore);
     }
 
     public string BuildCodeSelectionSystemPrompt(IEnumerable<string> selectedGroups)
@@ -139,7 +141,7 @@ public sealed class CssCodebookPromptService
         return builder.ToString().Trim();
     }
 
-    public string BuildCodeSelectionUserPrompt(string statementText, IEnumerable<AiCodeGroupSentiment> preselectedGroups)
+    public string BuildCodeSelectionUserPrompt(string statementText, IEnumerable<AiCodeGroupSentiment> preselectedGroups, int? customerSatisfactionScore = null)
     {
         var builder = new StringBuilder();
         builder.AppendLine("Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS.");
@@ -168,6 +170,7 @@ public sealed class CssCodebookPromptService
         }
 
         builder.AppendLine();
+        AppendCustomerSatisfactionContext(builder, customerSatisfactionScore);
         builder.AppendLine("Antworte ausschliesslich mit dem geforderten JSON.");
         builder.AppendLine();
         builder.AppendLine("Kundenaussage:");
@@ -532,11 +535,33 @@ public sealed class CssCodebookPromptService
         builder.AppendLine("}");
     }
 
-    private static string BuildStatementPrompt(string intro, string statementText)
+    private static string BuildStatementPrompt(string intro, string statementText, int? customerSatisfactionScore)
     {
-        return intro + "\n" +
-               "Antworte ausschliesslich mit dem geforderten JSON.\n\n" +
-               "Kundenaussage:\n\"" + statementText + "\"";
+        var builder = new StringBuilder();
+        builder.AppendLine(intro);
+        AppendCustomerSatisfactionContext(builder, customerSatisfactionScore);
+        builder.AppendLine();
+        builder.AppendLine("Antworte ausschliesslich mit dem geforderten JSON.");
+        builder.AppendLine();
+        builder.AppendLine("Kundenaussage:");
+        builder.Append('"').Append(statementText).AppendLine("\"");
+        return builder.ToString().Trim();
+    }
+
+    private static void AppendCustomerSatisfactionContext(StringBuilder builder, int? customerSatisfactionScore)
+    {
+        if (!customerSatisfactionScore.HasValue || customerSatisfactionScore.Value is < 1 or > 10)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("Zusaetzlicher Kontext:");
+        builder.AppendLine($"- Kundenzufriedenheit auf einer Skala von 1 bis 10: {customerSatisfactionScore.Value}");
+        builder.AppendLine("- Nutze diesen Wert nur als unterstuetzendes Signal fuer das Sentiment.");
+        builder.AppendLine("- Die Auswahl von Codegruppen und Codes muss primaer aus dem Text folgen.");
+        builder.AppendLine("- Falls Text und Zufriedenheitsscore widerspruechlich sind, hat der Text Vorrang.");
+        builder.AppendLine("- Typische Tendenz: 1-4 eher negativ, 5-6 eher neutral oder ambivalent, 7-10 eher positiv.");
     }
 
     private static string NormalizeSentiment(string? raw)
