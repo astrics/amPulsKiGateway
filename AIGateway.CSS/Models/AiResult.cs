@@ -14,5 +14,7 @@ public class AiResult
 public class AiKeyword
 {
     public int Id { get; set; }
+    public string ExternalCodeNr { get; set; } = "";
+    public string CodeGroup { get; set; } = "";
     public string Label { get; set; } = "";
 }

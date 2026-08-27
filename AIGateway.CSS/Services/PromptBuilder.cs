@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AiGateway.CSS.Api.Models;
@@ -300,7 +300,13 @@ public sealed class CssCodebookPromptService
 
         result.CodeMatches = normalizedMatches;
         result.Keywords = normalizedMatches
-            .Select(match => new AiKeyword { Id = match.Id, Label = match.Code })
+            .Select(match => new AiKeyword
+            {
+                Id = match.Id,
+                ExternalCodeNr = string.IsNullOrWhiteSpace(match.ExternalCodeNr) && match.Id > 0 ? match.Id.ToString() : match.ExternalCodeNr,
+                CodeGroup = match.CodeGroup,
+                Label = match.Code
+            })
             .ToList();
 
         var normalizedGroupSentiments = result.CodeGroupSentiments
@@ -357,11 +363,17 @@ public sealed class CssCodebookPromptService
         var match = new AiCodeMatch
         {
             Id = input.Id,
+            ExternalCodeNr = NormalizeWhitespace(input.ExternalCodeNr),
             CodeGroup = NormalizeWhitespace(input.CodeGroup),
             Code = NormalizeWhitespace(input.Code),
             Sentiment = NormalizeSentiment(input.Sentiment),
             Evidence = NormalizeWhitespace(input.Evidence)
         };
+
+        if (string.IsNullOrWhiteSpace(match.ExternalCodeNr) && match.Id > 0)
+        {
+            match.ExternalCodeNr = match.Id.ToString();
+        }
 
         if (_labelsById.TryGetValue(match.Id, out var label))
         {
@@ -1262,5 +1274,7 @@ public sealed class CssCodebookPromptService
         return string.Join(' ', parts).Trim();
     }
 }
+
+
 
 

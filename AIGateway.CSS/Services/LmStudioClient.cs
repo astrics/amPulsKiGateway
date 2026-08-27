@@ -132,15 +132,23 @@ public class LmStudioClient : ILmStudioClient
             Success = string.IsNullOrWhiteSpace(parsed.ParseError),
             Sentiment = parsed.Sentiment,
             Keywords = parsed.Keywords
-                .Select(keyword => new KeywordResult { Id = keyword.Id, Label = keyword.Label })
+                .Select(keyword => new KeywordResult
+                {
+                    Id = keyword.Id,
+                    ExternalCodeNr = keyword.ExternalCodeNr,
+                    CodeGroup = keyword.CodeGroup,
+                    Label = keyword.Label
+                })
                 .ToList(),
             CodeMatches = parsed.CodeMatches
                 .Select(match => new AiCodeMatch
                 {
                     Id = match.Id,
+                    ExternalCodeNr = match.ExternalCodeNr,
                     CodeGroup = match.CodeGroup,
                     Code = match.Code,
-                    Sentiment = match.Sentiment
+                    Sentiment = match.Sentiment,
+                    Evidence = match.Evidence
                 })
                 .ToList(),
             CodeGroupSentiments = parsed.CodeGroupSentiments
@@ -200,5 +208,7 @@ public class LmStudioResponse
 public class KeywordResult
 {
     public int Id { get; set; }
+    public string ExternalCodeNr { get; set; } = string.Empty;
+    public string CodeGroup { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
 }

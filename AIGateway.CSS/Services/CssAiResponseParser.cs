@@ -79,7 +79,12 @@ public static class CssAiResponseParser
         {
             if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var numericId) && numericId > 0)
             {
-                keywords.Add(new AiKeyword { Id = numericId, Label = string.Empty });
+                keywords.Add(new AiKeyword
+                {
+                    Id = numericId,
+                    ExternalCodeNr = numericId.ToString(),
+                    Label = string.Empty
+                });
                 continue;
             }
 
@@ -88,7 +93,12 @@ public static class CssAiResponseParser
                 var stringValue = item.GetString() ?? string.Empty;
                 if (int.TryParse(stringValue, out var parsedId) && parsedId > 0)
                 {
-                    keywords.Add(new AiKeyword { Id = parsedId, Label = string.Empty });
+                    keywords.Add(new AiKeyword
+                    {
+                        Id = parsedId,
+                        ExternalCodeNr = parsedId.ToString(),
+                        Label = string.Empty
+                    });
                 }
                 else if (!string.IsNullOrWhiteSpace(stringValue))
                 {
@@ -98,10 +108,18 @@ public static class CssAiResponseParser
             }
 
             var id = ReadInt(item, "id", "Id", "number");
+            var externalCodeNr = ReadString(item, "externalCodeNr", "external_code_nr", "number");
+            var codeGroup = ReadString(item, "codeGroup", "code_group", "group");
             var labelValue = ReadString(item, "label", "Label", "code", "name");
             if (id > 0 || !string.IsNullOrWhiteSpace(labelValue))
             {
-                keywords.Add(new AiKeyword { Id = id, Label = labelValue });
+                keywords.Add(new AiKeyword
+                {
+                    Id = id,
+                    ExternalCodeNr = string.IsNullOrWhiteSpace(externalCodeNr) && id > 0 ? id.ToString() : externalCodeNr,
+                    CodeGroup = codeGroup,
+                    Label = labelValue
+                });
             }
         }
 
@@ -147,6 +165,7 @@ public static class CssAiResponseParser
             }
 
             var id = ReadInt(item, "id", "Id", "number");
+            var externalCodeNr = ReadString(item, "externalCodeNr", "external_code_nr", "number");
             var codeGroup = ReadString(item, "codeGroup", "code_group", "group");
             var code = ReadString(item, "code", "label", "name");
             var sentiment = ReadString(item, "sentiment");
@@ -157,6 +176,7 @@ public static class CssAiResponseParser
                 matches.Add(new AiCodeMatch
                 {
                     Id = id,
+                    ExternalCodeNr = string.IsNullOrWhiteSpace(externalCodeNr) && id > 0 ? id.ToString() : externalCodeNr,
                     CodeGroup = codeGroup,
                     Code = code,
                     Sentiment = sentiment,
@@ -315,3 +335,4 @@ public static class CssAiResponseParser
         return text;
     }
 }
+

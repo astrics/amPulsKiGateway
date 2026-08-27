@@ -37,10 +37,17 @@ public class ResultFileWriter
                     metadaten_id = r.MetadatenId,
                     text = r.Text,
                     sentiment = r.Sentiment,
-                    keywords = r.Keywords.Select(k => new { k.Id, k.Label }),
+                    keywords = r.Keywords.Select(k => new
+                    {
+                        k.Id,
+                        k.ExternalCodeNr,
+                        k.CodeGroup,
+                        k.Label
+                    }),
                     code_matches = r.CodeMatches.Select(m => new
                     {
                         id = m.Id,
+                        external_code_nr = m.ExternalCodeNr,
                         code_group = m.CodeGroup,
                         code = m.Code,
                         sentiment = m.Sentiment,
@@ -70,3 +77,4 @@ public class ResultFileWriter
         }
     }
 }
+

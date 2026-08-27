@@ -59,14 +59,18 @@ public class BatchJobProcessor
                         entry.Keywords = result.Keywords.Select(k => new KeywordEntry
                         {
                             Id = k.Id,
+                            ExternalCodeNr = k.ExternalCodeNr,
+                            CodeGroup = k.CodeGroup,
                             Label = k.Label
                         }).ToList();
                         entry.CodeMatches = result.CodeMatches.Select(match => new AiCodeMatch
                         {
                             Id = match.Id,
+                            ExternalCodeNr = match.ExternalCodeNr,
                             CodeGroup = match.CodeGroup,
                             Code = match.Code,
-                            Sentiment = match.Sentiment
+                            Sentiment = match.Sentiment,
+                            Evidence = match.Evidence
                         }).ToList();
                         entry.CodeGroupSentiments = result.CodeGroupSentiments.Select(group => new AiCodeGroupSentiment
                         {

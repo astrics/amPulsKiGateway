@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using AiGateway.CSS.Api.Models;
 using AiGateway.CSS.Api.Services;
 
@@ -248,7 +248,13 @@ public class AnalysisController : ControllerBase
 
     private static List<AiKeyword> CloneKeywords(IEnumerable<AiKeyword>? source)
     {
-        return source?.Select(keyword => new AiKeyword { Id = keyword.Id, Label = keyword.Label }).ToList()
+        return source?.Select(keyword => new AiKeyword
+        {
+            Id = keyword.Id,
+            ExternalCodeNr = keyword.ExternalCodeNr,
+            CodeGroup = keyword.CodeGroup,
+            Label = keyword.Label
+        }).ToList()
                ?? new List<AiKeyword>();
     }
 
@@ -257,6 +263,7 @@ public class AnalysisController : ControllerBase
         return source?.Select(match => new AiCodeMatch
         {
             Id = match.Id,
+            ExternalCodeNr = match.ExternalCodeNr,
             CodeGroup = match.CodeGroup,
             Code = match.Code,
             Sentiment = match.Sentiment,
@@ -274,4 +281,8 @@ public class AnalysisController : ControllerBase
         }).ToList() ?? new List<AiCodeGroupSentiment>();
     }
 }
+
+
+
+
 
