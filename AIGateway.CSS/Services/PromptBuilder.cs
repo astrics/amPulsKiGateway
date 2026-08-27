@@ -11,6 +11,7 @@ public sealed class CssCodebookPromptService
     private const string CompactPromptVariantV1 = "compact_v1";
     private const string CompactPromptVariantV2 = "compact_v2";
     private const string QualityPromptVariantV1 = "quality_v1";
+    private const string QualityPromptVariantV2 = "quality_v2";
     private const string SinglePassMode = "single_pass";
     private const string TwoStageMode = "two_stage";
 
@@ -77,7 +78,9 @@ public sealed class CssCodebookPromptService
         return BuildStatementPrompt(
             IsQualityPromptVariantV1
                 ? "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS. Waehle nur fachlich klar belegte Codes und nenne pro gewaehltm Code eine kurze Text-Evidenz aus der Aussage."
-                : "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme die passenden Codes.",
+                : IsQualityPromptVariantV2
+                    ? "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS. Waehle alle fachlich passenden Codes, gib die exakten Codebezeichnungen und Codegruppen aus und trenne aehnliche Themen sorgfaeltig voneinander."
+                    : "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme die passenden Codes.",
             statementText,
             customerSatisfactionScore);
     }
@@ -89,7 +92,9 @@ public sealed class CssCodebookPromptService
         return BuildStatementPrompt(
             IsQualityPromptVariantV1
                 ? "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen. Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein. Ordne nach inhaltlicher Bedeutung zu und waehle nur Gruppen mit klarer fachlicher Evidenz."
-                : "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen. Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein. Ordne nach Bedeutung, nicht nach Sprache, zu.",
+                : IsQualityPromptVariantV2
+                    ? "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen. Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein. Ordne semantisch zu und trenne besonders zwischen Mitarbeiter, Kundenbetreuung, Produkt, Praemien, Leistungsbezug und Digital."
+                    : "Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS und bestimme zuerst nur die passenden Codegruppen. Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein. Ordne nach Bedeutung, nicht nach Sprache, zu.",
             statementText,
             customerSatisfactionScore);
     }
@@ -100,6 +105,11 @@ public sealed class CssCodebookPromptService
         if (IsQualityPromptVariantV1)
         {
             return BuildQualityV1CodeSelectionSystemPrompt(groups);
+        }
+
+        if (IsQualityPromptVariantV2)
+        {
+            return BuildQualityV2CodeSelectionSystemPrompt(groups);
         }
 
         if (IsCompactPromptVariantV2)
@@ -166,6 +176,12 @@ public sealed class CssCodebookPromptService
             builder.AppendLine("Nutze die Vorselektion der Codegruppen nur als Hinweis.");
             builder.AppendLine("Waehle nur Codes, die inhaltlich klar aus dem Text folgen.");
             builder.AppendLine("Gib fuer jeden gewaehltm Code eine sehr kurze Text-Evidenz aus der Aussage zurueck.");
+        }
+        else if (IsQualityPromptVariantV2)
+        {
+            builder.AppendLine("Analysiere jetzt genau diese einzelne Kundenaussage fuer CSS.");
+            builder.AppendLine("Nutze die Vorselektion der Codegruppen nur als Hinweis.");
+            builder.AppendLine("Waehle alle fachlich passenden Codes, trenne aehnliche Themen sorgfaeltig voneinander und gib nur Codes aus der freigegebenen Liste zurueck.");
         }
         else if (IsCompactPromptVariantV2)
         {
@@ -326,7 +342,7 @@ public sealed class CssCodebookPromptService
             .OrderBy(group => group.CodeGroup)
             .ToList();
 
-        if (IsQualityPromptVariantV1)
+        if ((IsQualityPromptVariantV1 || IsQualityPromptVariantV2) && normalizedMatches.Count > 0)
         {
             normalizedGroupSentiments = DeriveGroupSentiments(normalizedMatches);
         }
@@ -447,6 +463,11 @@ public sealed class CssCodebookPromptService
             return BuildQualityV1SinglePassSystemPrompt();
         }
 
+        if (IsQualityPromptVariantV2)
+        {
+            return BuildQualityV2SinglePassSystemPrompt();
+        }
+
         if (IsCompactPromptVariantV2)
         {
             return BuildCompactV2SinglePassSystemPrompt();
@@ -505,6 +526,11 @@ public sealed class CssCodebookPromptService
         if (IsQualityPromptVariantV1)
         {
             return BuildQualityV1CodeGroupSystemPrompt();
+        }
+
+        if (IsQualityPromptVariantV2)
+        {
+            return BuildQualityV2CodeGroupSystemPrompt();
         }
 
         if (IsCompactPromptVariantV2)
@@ -924,6 +950,177 @@ public sealed class CssCodebookPromptService
         };
     }
 
+    private string BuildQualityV2SinglePassSystemPrompt()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Du bist ein spezialisiertes Klassifikationsmodell fuer offene Kundenaussagen einer Krankenversicherung.");
+        builder.AppendLine();
+        builder.AppendLine("Analysiere genau eine einzelne CSS-Kundenaussage.");
+        builder.AppendLine("Arbeite semantisch: Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein.");
+        builder.AppendLine("Waehle alle fachlich passenden Codes aus der CSS-Codeliste und trenne aehnliche Themen sorgfaeltig voneinander.");
+        builder.AppendLine();
+        AppendQualityV2SelectionRules(builder, restrictToSelectedGroups: false);
+        builder.AppendLine();
+        AppendFinalOutputSchema(builder);
+        builder.AppendLine();
+        builder.AppendLine("Erlaubte CSS-Codegruppen und Codes:");
+        AppendQualityV2AllowedCodes(builder, _labelsByGroup.Keys);
+        return builder.ToString().Trim();
+    }
+
+    private string BuildQualityV2CodeGroupSystemPrompt()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Du bist ein spezialisiertes Klassifikationsmodell fuer offene Kundenaussagen einer Krankenversicherung.");
+        builder.AppendLine();
+        builder.AppendLine("Erste Stufe: Bestimme nur die fachlich passenden CSS-Codegruppen fuer genau eine Kundenaussage.");
+        builder.AppendLine("Arbeite semantisch. Die Aussage kann kurz, stichwortartig sowie auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein.");
+        builder.AppendLine();
+        builder.AppendLine("Wichtige Regeln:");
+        builder.AppendLine("- Gib IMMER gueltiges JSON zurueck und keinerlei Text ausserhalb des JSON.");
+        builder.AppendLine("- Verwende AUSSCHLIESSLICH Codegruppen aus der unten aufgefuehrten Liste.");
+        builder.AppendLine("- Erfinde keine neuen Codegruppen.");
+        builder.AppendLine("- Waehle hoechstens " + _maxCodeGroupsPerStatement + " Codegruppen.");
+        builder.AppendLine("- Waehle eine Codegruppe, wenn das Thema fachlich erkennbar ist, auch bei kurzen oder telegrammartigen Aussagen.");
+        builder.AppendLine("- Reines Lob oder Tadel ohne Themenbezug darf nicht automatisch zu Produkt, Digital, Leistungsbezug oder Praemien fuehren.");
+        builder.AppendLine("- In dieser ersten Stufe bleiben keywords und codeMatches leer.");
+        builder.AppendLine("- Wenn keine Codegruppe sicher passt, gib leere Arrays zurueck.");
+        builder.AppendLine();
+        AppendCodeGroupPreselectionSchema(builder);
+        builder.AppendLine();
+        builder.AppendLine("Erlaubte CSS-Codegruppen:");
+        AppendQualityV2AllowedCodeGroups(builder);
+        return builder.ToString().Trim();
+    }
+
+    private string BuildQualityV2CodeSelectionSystemPrompt(IEnumerable<string> selectedGroups)
+    {
+        var groups = SelectKnownCodeGroups(selectedGroups);
+        var builder = new StringBuilder();
+        builder.AppendLine("Du bist ein spezialisiertes Klassifikationsmodell fuer offene Kundenaussagen einer Krankenversicherung.");
+        builder.AppendLine();
+        builder.AppendLine("Zweite Stufe: Waehle passende CSS-Codes nur aus den freigegebenen Codegruppen.");
+        builder.AppendLine("Arbeite semantisch. Die Aussage kann auf Deutsch, Franzoesisch, Italienisch oder Englisch formuliert sein.");
+        builder.AppendLine("Trenne aehnliche Themen sorgfaeltig und bevorzuge die fachlich treffendste Zuordnung.");
+        builder.AppendLine();
+        AppendQualityV2SelectionRules(builder, restrictToSelectedGroups: true);
+        builder.AppendLine();
+        AppendFinalOutputSchema(builder);
+        builder.AppendLine();
+        builder.AppendLine("Freigegebene CSS-Codegruppen und Codes:");
+        AppendQualityV2AllowedCodes(builder, groups);
+        return builder.ToString().Trim();
+    }
+
+    private void AppendQualityV2SelectionRules(StringBuilder builder, bool restrictToSelectedGroups)
+    {
+        builder.AppendLine("Wichtige Regeln:");
+        builder.AppendLine("- Gib IMMER gueltiges JSON zurueck und keinerlei Text ausserhalb des JSON.");
+        builder.AppendLine(restrictToSelectedGroups
+            ? "- Verwende AUSSCHLIESSLICH Codes aus den freigegebenen Codegruppen."
+            : "- Verwende AUSSCHLIESSLICH Codes aus der unten aufgefuehrten Liste.");
+        builder.AppendLine("- Erfinde keine neuen Codes oder Codegruppen.");
+        builder.AppendLine("- Eine Aussage kann mehrere Codes enthalten, wenn mehrere fachliche Themen wirklich angesprochen werden.");
+        builder.AppendLine("- Waehle einen Code nicht nur wegen einzelner Woerter, sondern wegen der inhaltlichen Bedeutung der gesamten Aussage.");
+        builder.AppendLine("- Wenn eine kurze Aussage fachlich klar ein Thema benennt, darfst du dieses Thema trotzdem codieren.");
+        builder.AppendLine("- Bevorzuge die fachlich treffendste Zuordnung, aber sei nicht uebervorsichtig: klare Themen sollen codiert werden.");
+        builder.AppendLine("- Mitarbeiter = Verhalten, Freundlichkeit, Kompetenz oder Eingehen auf den Kunden durch Personen.");
+        builder.AppendLine("- Kundenbetreuung = Erreichbarkeit, Antwortdauer, Kontinuitaet, Weiterverbinden oder geloestes/nicht geloestes Anliegen.");
+        builder.AppendLine("- Produkt = Angebot, Modell, Police, Offerte, Aufnahmebedingungen oder Leistungsumfang eines Produkts.");
+        builder.AppendLine("- Praemien & Bezahlung = Preis, Praemie, Rechnung, Zahlung, Mahnung oder Betreibung.");
+        builder.AppendLine("- Leistungsbezug = Rueckerstattung, Leistungsabrechnung, Leistungsentscheid oder Bezug zu Arzt, Therapeut, Medgate oder Medi24.");
+        builder.AppendLine("- Digital = Homepage, App, Portal, Usability oder technische Probleme digitaler Kanaele.");
+        builder.AppendLine("- Nutze den Kundenzufriedenheits-Score nur als Zusatzsignal fuer das Sentiment, nicht fuer die Themenauswahl.");
+        builder.AppendLine("- keywords muss die gleiche Auswahl wie codeMatches enthalten. Jeder keywords-Eintrag nutzt dieselbe id und denselben Code-Text wie der passende codeMatches-Eintrag.");
+        builder.AppendLine("- codeGroupSentiments darf nur Codegruppen enthalten, in denen mindestens ein Code gematcht wurde.");
+        builder.AppendLine("- Wenn in derselben Codegruppe sowohl positive als auch negative Aspekte vorkommen, setze das Sentiment der Codegruppe auf Neutral.");
+        builder.AppendLine("- Wenn eine Aussage fuer einen Code bzw. eine Codegruppe rein beschreibend und nicht klar wertend ist, setze das Sentiment auf Neutral.");
+        builder.AppendLine("- Wenn kein Code sicher passt, gib leere Arrays fuer keywords, codeMatches und codeGroupSentiments zurueck.");
+    }
+
+    private void AppendQualityV2AllowedCodeGroups(StringBuilder builder)
+    {
+        foreach (var group in _labelsByGroup)
+        {
+            builder.AppendLine($"- {group.Key}: Themen {Condense(string.Join(" | ", group.Value.Select(label => NormalizeWhitespace(label.Code)).Distinct(StringComparer.OrdinalIgnoreCase)), 240)}");
+
+            var hints = group.Value
+                .Select(label => NormalizeWhitespace(label.CodingRule))
+                .Where(rule => !string.IsNullOrWhiteSpace(rule))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
+                .ToList();
+            if (hints.Count > 0)
+            {
+                builder.AppendLine($"  Wann waehlen: {Condense(string.Join(" ", hints), Math.Min(_maxCodingRuleLength, 240))}");
+            }
+
+            var example = group.Value
+                .Select(label => NormalizeWhitespace(label.ExampleText))
+                .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text));
+            if (!string.IsNullOrWhiteSpace(example))
+            {
+                builder.AppendLine($"  Beispiel: {Condense(example, Math.Min(_maxExampleLength, 140))}");
+            }
+
+            var boundaryHint = GetQualityV2GroupBoundaryHint(group.Key);
+            if (!string.IsNullOrWhiteSpace(boundaryHint))
+            {
+                builder.AppendLine($"  Nicht waehlen bei: {boundaryHint}");
+            }
+        }
+    }
+
+    private void AppendQualityV2AllowedCodes(StringBuilder builder, IEnumerable<string> groups)
+    {
+        foreach (var groupName in groups)
+        {
+            if (!_labelsByGroup.TryGetValue(groupName, out var labels))
+            {
+                continue;
+            }
+
+            builder.AppendLine($"Codegruppe: {groupName}");
+            var boundaryHint = GetQualityV2GroupBoundaryHint(groupName);
+            if (!string.IsNullOrWhiteSpace(boundaryHint))
+            {
+                builder.AppendLine($"- Abgrenzung: {boundaryHint}");
+            }
+
+            foreach (var label in labels)
+            {
+                builder.AppendLine($"- ID {label.Number}: {label.Code}");
+                if (!string.IsNullOrWhiteSpace(label.CodingRule))
+                {
+                    builder.AppendLine($"  Wann waehlen: {Condense(label.CodingRule, Math.Min(_maxCodingRuleLength, 240))}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(label.ExampleText))
+                {
+                    builder.AppendLine($"  Beispiel: {Condense(label.ExampleText, Math.Min(_maxExampleLength, 140))}");
+                }
+            }
+
+            builder.AppendLine();
+        }
+    }
+
+    private static string GetQualityV2GroupBoundaryHint(string groupName)
+    {
+        return groupName switch
+        {
+            "Mitarbeiter" => "wenn es primaer um Erreichbarkeit, Weiterverbinden, Antwortdauer oder Prozessgeschwindigkeit geht und nicht um das Verhalten einer Person",
+            "Prämien & Bezahlung" => "wenn keine Aussage zu Preis, Praemie, Rechnung, Zahlung, Mahnung oder Betreibung vorliegt",
+            "Produkt" => "wenn primaer Service, App, Portal oder allgemeine Zufriedenheit beschrieben wird statt eines Versicherungsangebots oder Produkts",
+            "Kundenbetreuung" => "wenn vor allem Freundlichkeit, Kompetenz oder Engagement eines Mitarbeiters bewertet wird statt Erreichbarkeit oder Loesungsprozess",
+            "Leistungsbezug" => "wenn kein Bezug zu Rueckerstattung, Leistungsabrechnung, Leistungsentscheid oder Leistungserbringern vorhanden ist",
+            "Digital" => "wenn eher Produkt, Preis oder allgemeiner Service gemeint ist und kein digitaler Kanal erkennbar ist",
+            "Image" => "wenn nur ein konkreter Einzelfall genannt wird, ohne Aussage zum generellen Bild der Krankenversicherung",
+            "Sonstiges" => "wenn ein spezifischerer Code aus einer anderen Codegruppe fachlich besser passt",
+            "Allgemeines" => "wenn bereits ein konkreteres Thema eindeutig benannt ist",
+            _ => string.Empty
+        };
+    }
     private static void AppendFinalOutputSchema(StringBuilder builder)
     {
         builder.AppendLine("Verwende fuer die Ausgabe IMMER exakt dieses JSON-Schema:");
@@ -1151,6 +1348,9 @@ public sealed class CssCodebookPromptService
     private bool IsQualityPromptVariantV1 =>
         string.Equals(_promptVariant, QualityPromptVariantV1, StringComparison.OrdinalIgnoreCase);
 
+    private bool IsQualityPromptVariantV2 =>
+        string.Equals(_promptVariant, QualityPromptVariantV2, StringComparison.OrdinalIgnoreCase);
+
     private bool UsesCompactPromptVariant => IsCompactPromptVariantV1 || IsCompactPromptVariantV2;
 
     private static int GetDefaultCodingRuleLength(string promptVariant)
@@ -1158,6 +1358,11 @@ public sealed class CssCodebookPromptService
         if (string.Equals(promptVariant, QualityPromptVariantV1, StringComparison.OrdinalIgnoreCase))
         {
             return 320;
+        }
+
+        if (string.Equals(promptVariant, QualityPromptVariantV2, StringComparison.OrdinalIgnoreCase))
+        {
+            return 240;
         }
 
         if (string.Equals(promptVariant, CompactPromptVariantV2, StringComparison.OrdinalIgnoreCase))
@@ -1177,6 +1382,11 @@ public sealed class CssCodebookPromptService
             return 220;
         }
 
+        if (string.Equals(promptVariant, QualityPromptVariantV2, StringComparison.OrdinalIgnoreCase))
+        {
+            return 140;
+        }
+
         if (string.Equals(promptVariant, CompactPromptVariantV2, StringComparison.OrdinalIgnoreCase))
         {
             return 40;
@@ -1192,6 +1402,11 @@ public sealed class CssCodebookPromptService
         if (string.Equals(rawPromptVariant?.Trim(), QualityPromptVariantV1, StringComparison.OrdinalIgnoreCase))
         {
             return QualityPromptVariantV1;
+        }
+
+        if (string.Equals(rawPromptVariant?.Trim(), QualityPromptVariantV2, StringComparison.OrdinalIgnoreCase))
+        {
+            return QualityPromptVariantV2;
         }
 
         if (string.Equals(rawPromptVariant?.Trim(), CompactPromptVariantV2, StringComparison.OrdinalIgnoreCase))
@@ -1274,6 +1489,8 @@ public sealed class CssCodebookPromptService
         return string.Join(' ', parts).Trim();
     }
 }
+
+
 
 
 
