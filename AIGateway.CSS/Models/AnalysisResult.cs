@@ -14,6 +14,9 @@ public class AnalysisResult
     public List<AiKeyword>? Keywords { get; set; }
     public List<AiCodeMatch> CodeMatches { get; set; } = new();
     public List<AiCodeGroupSentiment> CodeGroupSentiments { get; set; } = new();
+    public List<int> CandidateCodeIds { get; set; } = new();
+    public bool NeedsReview { get; set; }
+    public List<string> ValidationWarnings { get; set; } = new();
     public string? RawResponse { get; set; }
     public string? ParseError { get; set; }
     public string? ErrorMessage { get; set; }

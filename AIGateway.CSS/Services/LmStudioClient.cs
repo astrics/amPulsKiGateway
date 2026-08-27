@@ -10,26 +10,33 @@ public class LmStudioClient : ILmStudioClient
     private readonly string _baseUrl;
     private readonly string _model;
     private readonly double _temperature;
+    private readonly double _candidateTemperature;
     private readonly LmStudioConcurrencyGate _concurrencyGate;
     private readonly CssCodebookPromptService _promptService;
+    private readonly CssCodeCandidateRetriever _candidateRetriever;
 
     public LmStudioClient(
         HttpClient http,
         IConfiguration config,
         LmStudioConcurrencyGate concurrencyGate,
-        CssCodebookPromptService promptService)
+        CssCodebookPromptService promptService,
+        CssCodeCandidateRetriever candidateRetriever)
     {
         _http = http;
         _baseUrl = config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         _model = config["Gateway:ModelName"] ?? "qwen2.5-7b-instruct";
         _temperature = config.GetValue<double?>("Gateway:Temperature") ?? 0.1;
+        _candidateTemperature = config.GetValue<double?>("CssCodebook:CandidateTemperature") ?? 0.0;
         _concurrencyGate = concurrencyGate;
         _promptService = promptService;
+        _candidateRetriever = candidateRetriever;
     }
 
     public async Task<LmStudioResponse> ClassifyStatementAsync(string statementText, CancellationToken ct = default)
     {
-        var parsed = _promptService.UsesTwoStageClassification
+        var parsed = _promptService.UsesCandidateRerankClassification
+            ? await ClassifyCandidateRerankAsync(statementText, ct)
+            : _promptService.UsesTwoStageClassification
             ? await ClassifyTwoStageAsync(statementText, ct)
             : await ClassifySinglePassAsync(statementText, ct);
 
@@ -75,6 +82,24 @@ public class LmStudioClient : ILmStudioClient
             sw.Stop();
             return (false, null, (int)sw.ElapsedMilliseconds);
         }
+    }
+
+    private async Task<AiResult> ClassifyCandidateRerankAsync(string statementText, CancellationToken ct)
+    {
+        var candidates = _candidateRetriever.Retrieve(statementText);
+        var responseJson = await SendChatCompletionAsync(
+            _promptService.BuildCandidateRerankSystemPrompt(candidates),
+            _promptService.BuildCandidateRerankUserPrompt(statementText, candidates),
+            1200,
+            ct,
+            _candidateTemperature);
+
+        var parsed = CssCandidateResponseParser.ParseCompletionResponse(
+            responseJson,
+            statementText,
+            candidates);
+        _promptService.NormalizeResult(parsed);
+        return parsed;
     }
 
     private async Task<AiResult> ClassifySinglePassAsync(string statementText, CancellationToken ct)
@@ -159,6 +184,9 @@ public class LmStudioClient : ILmStudioClient
                     MatchedCodeIds = group.MatchedCodeIds.ToList()
                 })
                 .ToList(),
+            CandidateCodeIds = parsed.CandidateCodeIds.ToList(),
+            NeedsReview = parsed.NeedsReview,
+            ValidationWarnings = parsed.ValidationWarnings.ToList(),
             RawResponse = parsed.RawResponse,
             Error = parsed.ParseError
         };
@@ -168,7 +196,8 @@ public class LmStudioClient : ILmStudioClient
         string systemPrompt,
         string userPrompt,
         int maxTokens,
-        CancellationToken ct)
+        CancellationToken ct,
+        double? temperatureOverride = null)
     {
         using var lease = await _concurrencyGate.EnterAsync(ct);
         var requestBody = new
@@ -179,7 +208,7 @@ public class LmStudioClient : ILmStudioClient
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userPrompt }
             },
-            temperature = _temperature,
+            temperature = temperatureOverride ?? _temperature,
             max_tokens = maxTokens,
             response_format = new { type = "text" },
             stream = false
@@ -201,6 +230,9 @@ public class LmStudioResponse
     public List<KeywordResult> Keywords { get; set; } = new();
     public List<AiCodeMatch> CodeMatches { get; set; } = new();
     public List<AiCodeGroupSentiment> CodeGroupSentiments { get; set; } = new();
+    public List<int> CandidateCodeIds { get; set; } = new();
+    public bool NeedsReview { get; set; }
+    public List<string> ValidationWarnings { get; set; } = new();
     public string RawResponse { get; set; } = string.Empty;
     public string? Error { get; set; }
 }

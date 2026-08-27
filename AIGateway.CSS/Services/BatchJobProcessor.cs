@@ -78,6 +78,9 @@ public class BatchJobProcessor
                             Sentiment = group.Sentiment,
                             MatchedCodeIds = group.MatchedCodeIds.ToList()
                         }).ToList();
+                        entry.CandidateCodeIds = result.CandidateCodeIds.ToList();
+                        entry.NeedsReview = result.NeedsReview;
+                        entry.ValidationWarnings = result.ValidationWarnings.ToList();
                         entry.RawResponse = result.RawResponse;
                     }
                     else

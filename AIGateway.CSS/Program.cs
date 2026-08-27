@@ -38,6 +38,7 @@ builder.Services.AddSingleton<BatchJobProcessor>();
 builder.Services.AddSingleton<ResultFileWriter>();
 builder.Services.AddSingleton<ResultStore>();
 builder.Services.AddSingleton<CssCodebookPromptService>();
+builder.Services.AddSingleton<CssCodeCandidateRetriever>();
 
 builder.Services.Configure<GatewayOptions>(
     builder.Configuration.GetSection(GatewayOptions.SectionName));

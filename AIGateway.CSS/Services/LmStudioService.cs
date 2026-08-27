@@ -11,31 +11,80 @@ public class LmStudioService
     private readonly ILogger<LmStudioService> _logger;
     private readonly LmStudioConcurrencyGate _concurrencyGate;
     private readonly CssCodebookPromptService _promptService;
+    private readonly CssCodeCandidateRetriever _candidateRetriever;
+    private readonly double _candidateTemperature;
 
     public LmStudioService(
         HttpClient http,
         IConfiguration config,
         ILogger<LmStudioService> logger,
         LmStudioConcurrencyGate concurrencyGate,
-        CssCodebookPromptService promptService)
+        CssCodebookPromptService promptService,
+        CssCodeCandidateRetriever candidateRetriever)
     {
         _http = http;
         _config = config;
         _logger = logger;
         _concurrencyGate = concurrencyGate;
         _promptService = promptService;
+        _candidateRetriever = candidateRetriever;
+        _candidateTemperature = config.GetValue<double?>("CssCodebook:CandidateTemperature") ?? 0.0;
     }
 
-    public async Task<AiResult> AnalyzeSync(string text, int? customerSatisfactionScore = null, CancellationToken cancellationToken = default)
+    public string ResolveClassificationMode(int? projectId = null) => _promptService.ResolveClassificationMode(projectId);
+
+    public async Task<AiResult> AnalyzeSync(
+        string text,
+        int? customerSatisfactionScore = null,
+        int? projectId = null,
+        CancellationToken cancellationToken = default)
     {
+        var classificationMode = _promptService.ResolveClassificationMode(projectId);
         _logger.LogInformation(
-            "CSS-Klassifizierungsstrategie: {Mode} | Kundenzufriedenheit={Score}",
-            _promptService.ClassificationMode,
+            "CSS-Klassifizierungsstrategie: {Mode} | ProjectId={ProjectId} | Kundenzufriedenheit={Score}",
+            classificationMode,
+            projectId,
             customerSatisfactionScore);
 
-        return _promptService.UsesTwoStageClassification
+        if (_promptService.UsesCandidateRerankClassificationForProject(projectId))
+        {
+            return await AnalyzeCandidateRerankAsync(text, customerSatisfactionScore, cancellationToken);
+        }
+
+        return _promptService.UsesTwoStageClassificationForProject(projectId)
             ? await AnalyzeTwoStageAsync(text, customerSatisfactionScore, cancellationToken)
             : await AnalyzeSinglePassAsync(text, customerSatisfactionScore, cancellationToken);
+    }
+
+    private async Task<AiResult> AnalyzeCandidateRerankAsync(
+        string text,
+        int? customerSatisfactionScore,
+        CancellationToken cancellationToken)
+    {
+        var candidates = _candidateRetriever.Retrieve(text);
+        var responseBody = await SendChatCompletionAsync(
+            _promptService.BuildCandidateRerankSystemPrompt(candidates),
+            _promptService.BuildCandidateRerankUserPrompt(text, candidates, customerSatisfactionScore),
+            1200,
+            "candidate_rerank",
+            cancellationToken,
+            _candidateTemperature);
+
+        var result = CssCandidateResponseParser.ParseCompletionResponse(
+            responseBody,
+            text,
+            candidates,
+            _logger);
+        _promptService.NormalizeResult(result);
+
+        _logger.LogInformation(
+            "CSS Candidate-Rerank abgeschlossen: Kandidaten={Candidates} | Auswahl={Selected} | Review={NeedsReview} | Warnungen={Warnings}",
+            string.Join(',', result.CandidateCodeIds),
+            string.Join(',', result.CodeMatches.Select(match => match.Id)),
+            result.NeedsReview,
+            result.ValidationWarnings.Count == 0 ? "<keine>" : string.Join(" | ", result.ValidationWarnings));
+
+        return result;
     }
 
     private async Task<AiResult> AnalyzeSinglePassAsync(string text, int? customerSatisfactionScore, CancellationToken cancellationToken)
@@ -102,7 +151,8 @@ public class LmStudioService
         string userPrompt,
         int maxTokens,
         string phase,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        double? temperatureOverride = null)
     {
         var baseUrl = _config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         var model = _config["Gateway:ModelName"] ?? "default";
@@ -115,7 +165,7 @@ public class LmStudioService
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userPrompt }
             },
-            temperature = 0.1,
+            temperature = temperatureOverride ?? 0.1,
             max_tokens = maxTokens,
             response_format = new { type = "text" }
         };

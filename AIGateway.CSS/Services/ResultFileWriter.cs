@@ -59,6 +59,9 @@ public class ResultFileWriter
                         sentiment = g.Sentiment,
                         matched_code_ids = g.MatchedCodeIds
                     }),
+                    candidate_code_ids = r.CandidateCodeIds,
+                    needs_review = r.NeedsReview,
+                    validation_warnings = r.ValidationWarnings,
                     processing_ms = r.ProcessingMs,
                     processed_at = r.ProcessedAt.ToString("o"),
                     error = r.Error,

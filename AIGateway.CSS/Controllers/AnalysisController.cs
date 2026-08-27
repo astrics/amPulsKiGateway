@@ -12,17 +12,20 @@ public class AnalysisController : ControllerBase
     private readonly ResultStore _store;
     private readonly ILogger<AnalysisController> _logger;
     private readonly IConfiguration _config;
+    private readonly CssCodeCandidateRetriever _candidateRetriever;
 
     public AnalysisController(
         LmStudioService lmStudio,
         ResultStore store,
         ILogger<AnalysisController> logger,
-        IConfiguration config)
+        IConfiguration config,
+        CssCodeCandidateRetriever candidateRetriever)
     {
         _lmStudio = lmStudio;
         _store = store;
         _logger = logger;
         _config = config;
+        _candidateRetriever = candidateRetriever;
     }
 
     [HttpPost("analyze")]
@@ -64,6 +67,9 @@ public class AnalysisController : ControllerBase
                     Keywords = CloneKeywords(cached.Keywords),
                     CodeMatches = CloneCodeMatches(cached.CodeMatches),
                     CodeGroupSentiments = CloneCodeGroupSentiments(cached.CodeGroupSentiments),
+                    CandidateCodeIds = cached.CandidateCodeIds.ToList(),
+                    NeedsReview = cached.NeedsReview,
+                    ValidationWarnings = cached.ValidationWarnings.ToList(),
                     RawResponse = cached.RawResponse,
                     ProcessingMs = 0,
                     Status = "completed",
@@ -86,12 +92,15 @@ public class AnalysisController : ControllerBase
                     keywords = cachedResult.Keywords,
                     codeMatches = cachedResult.CodeMatches,
                     codeGroupSentiments = cachedResult.CodeGroupSentiments,
+                    candidateCodeIds = cachedResult.CandidateCodeIds,
+                    needsReview = cachedResult.NeedsReview,
+                    validationWarnings = cachedResult.ValidationWarnings,
                     processingMs = 0
                 });
             }
 
             var startTime = DateTime.UtcNow;
-            var aiResult = await _lmStudio.AnalyzeSync(request.Text, request.CustomerSatisfactionScore, CancellationToken.None);
+            var aiResult = await _lmStudio.AnalyzeSync(request.Text, request.CustomerSatisfactionScore, request.ProjectId, CancellationToken.None);
             var processingMs = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
 
             var result = new AnalysisResult
@@ -107,6 +116,9 @@ public class AnalysisController : ControllerBase
                 Keywords = CloneKeywords(aiResult.Keywords),
                 CodeMatches = CloneCodeMatches(aiResult.CodeMatches),
                 CodeGroupSentiments = CloneCodeGroupSentiments(aiResult.CodeGroupSentiments),
+                CandidateCodeIds = aiResult.CandidateCodeIds.ToList(),
+                NeedsReview = aiResult.NeedsReview,
+                ValidationWarnings = aiResult.ValidationWarnings.ToList(),
                 RawResponse = aiResult.RawResponse,
                 ParseError = aiResult.ParseError,
                 ProcessingMs = processingMs,
@@ -135,6 +147,9 @@ public class AnalysisController : ControllerBase
                 keywords = result.Keywords,
                 codeMatches = result.CodeMatches,
                 codeGroupSentiments = result.CodeGroupSentiments,
+                candidateCodeIds = result.CandidateCodeIds,
+                needsReview = result.NeedsReview,
+                validationWarnings = result.ValidationWarnings,
                 rawResponse = result.RawResponse,
                 processingMs
             });
@@ -197,6 +212,9 @@ public class AnalysisController : ControllerBase
                 r.Keywords,
                 r.CodeMatches,
                 r.CodeGroupSentiments,
+                r.CandidateCodeIds,
+                r.NeedsReview,
+                r.ValidationWarnings,
                 r.ProcessingMs,
                 r.CachedFrom,
                 r.AnalyzedAt
@@ -225,6 +243,33 @@ public class AnalysisController : ControllerBase
             results = results.Where(r => r.Status == status).ToList();
 
         return Ok(new { projectId, count = results.Count, results });
+    }
+
+    [HttpPost("candidate-preview")]
+    public IActionResult PreviewCandidates([FromBody] SyncAnalyzeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            return BadRequest(new { error = "Text darf nicht leer sein" });
+        }
+
+        var candidates = _candidateRetriever.Retrieve(request.Text);
+        return Ok(new
+        {
+            projectId = request.ProjectId,
+            classificationMode = _lmStudio.ResolveClassificationMode(request.ProjectId),
+            statement = request.Text,
+            candidateCodeIds = candidates.Select(candidate => candidate.Id),
+            candidates = candidates.Select(candidate => new
+            {
+                id = candidate.Id,
+                codeGroup = candidate.CodeGroup,
+                code = candidate.Code,
+                score = candidate.Score,
+                matchedTerms = candidate.MatchedTerms,
+                expandedFromCodeIds = candidate.ExpandedFromCodeIds
+            })
+        });
     }
 
     [HttpGet("result/{statementId}")]

@@ -14,12 +14,15 @@ public sealed class CssCodebookPromptService
     private const string QualityPromptVariantV2 = "quality_v2";
     private const string SinglePassMode = "single_pass";
     private const string TwoStageMode = "two_stage";
+    private const string CandidateRerankMode = "candidate_rerank";
 
     private readonly CssCodebook _codebook;
     private readonly Dictionary<int, CssCodebookLabel> _labelsById;
     private readonly Dictionary<string, List<CssCodebookLabel>> _labelsByGroup;
     private readonly Dictionary<string, string> _groupAliases;
     private readonly string _classificationMode;
+    private readonly Dictionary<int, string> _classificationModeByProject;
+    private readonly string _candidateSurveyContext;
     private readonly string _promptVariant;
     private readonly int _maxCodeGroupsPerStatement;
     private readonly int _maxCodingRuleLength;
@@ -33,6 +36,18 @@ public sealed class CssCodebookPromptService
         _logger = logger;
         _codebook = LoadCodebook(config);
         _classificationMode = NormalizeMode(config["CssCodebook:ClassificationMode"]);
+        _classificationModeByProject = config
+            .GetSection("CssCodebook:ClassificationModeByProject")
+            .GetChildren()
+            .Select(entry => new
+            {
+                IsValidProject = int.TryParse(entry.Key, out var projectId),
+                ProjectId = int.TryParse(entry.Key, out projectId) ? projectId : 0,
+                Mode = NormalizeMode(entry.Value)
+            })
+            .Where(entry => entry.IsValidProject && entry.ProjectId > 0)
+            .ToDictionary(entry => entry.ProjectId, entry => entry.Mode);
+        _candidateSurveyContext = NormalizeWhitespace(config["CssCodebook:CandidateSurveyContext"]);
         _promptVariant = NormalizePromptVariant(config["CssCodebook:PromptVariant"]);
         _maxCodeGroupsPerStatement = Math.Max(1, config.GetValue<int?>("CssCodebook:MaxCodeGroupsPerStatement") ?? 3);
         _maxCodingRuleLength = Math.Max(80, config.GetValue<int?>("CssCodebook:MaxCodingRuleLength") ?? GetDefaultCodingRuleLength(_promptVariant));
@@ -69,7 +84,23 @@ public sealed class CssCodebookPromptService
     public string ClassificationMode => _classificationMode;
     public string PromptVariant => _promptVariant;
 
+    public IReadOnlyList<CssCodebookLabel> GetCodebookLabels() => _codebook.Labels;
+
+    public string ResolveClassificationMode(int? projectId = null)
+    {
+        return projectId.HasValue && _classificationModeByProject.TryGetValue(projectId.Value, out var projectMode)
+            ? projectMode
+            : _classificationMode;
+    }
+
     public bool UsesTwoStageClassification => string.Equals(_classificationMode, TwoStageMode, StringComparison.OrdinalIgnoreCase);
+    public bool UsesCandidateRerankClassification => string.Equals(_classificationMode, CandidateRerankMode, StringComparison.OrdinalIgnoreCase);
+
+    public bool UsesTwoStageClassificationForProject(int? projectId) =>
+        string.Equals(ResolveClassificationMode(projectId), TwoStageMode, StringComparison.OrdinalIgnoreCase);
+
+    public bool UsesCandidateRerankClassificationForProject(int? projectId) =>
+        string.Equals(ResolveClassificationMode(projectId), CandidateRerankMode, StringComparison.OrdinalIgnoreCase);
 
     public string GetSystemPrompt() => _singlePassSystemPrompt;
 
@@ -223,6 +254,85 @@ public sealed class CssCodebookPromptService
         builder.AppendLine();
         builder.AppendLine("Kundenaussage:");
         builder.Append('"').Append(statementText).AppendLine("\"");
+        return builder.ToString().Trim();
+    }
+
+    public string BuildCandidateRerankSystemPrompt(IReadOnlyList<CssCodeCandidate> candidates)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Du klassifizierst genau eine offene Kundenaussage einer Krankenversicherung.");
+        builder.AppendLine("Pruefe jeden bereitgestellten CSS-Codekandidaten unabhaengig mit match=true oder match=false.");
+        builder.AppendLine();
+        builder.AppendLine("Erfolgskriterien:");
+        builder.AppendLine("- Entscheide anhand der gesamten Bedeutung, nicht aufgrund eines einzelnen aehnlichen Wortes.");
+        builder.AppendLine("- Beachte die Abgrenzung 'Nicht waehlen bei' besonders.");
+        builder.AppendLine("- Mehrere Codes duerfen match=true haben, wenn mehrere Themen tatsaechlich belegt sind.");
+        builder.AppendLine("- Fuer match=true muss evidence ein kurzes, WOERTLICHES Zitat aus der Kundenaussage sein.");
+        builder.AppendLine("- Fuer match=false muss evidence eine leere Zeichenfolge sein.");
+        builder.AppendLine("- Gib fuer JEDEN Kandidaten genau eine Entscheidung zurueck.");
+        builder.AppendLine("- Verwende keine IDs ausserhalb der Kandidatenliste.");
+        builder.AppendLine("- Setze needsReview=true, wenn die Aussage ohne weiteren Kontext nicht verlaesslich codiert werden kann.");
+        builder.AppendLine("- Der Zufriedenheitsscore darf nur das Sentiment beeinflussen, niemals die Codeauswahl.");
+        builder.AppendLine();
+        builder.AppendLine("Ausgabe ausschliesslich als JSON in dieser Form:");
+        builder.AppendLine("{");
+        builder.AppendLine("  \"decisions\": [");
+        builder.AppendLine("    { \"id\": 19, \"match\": true, \"sentiment\": \"Positiv | Negativ | Neutral\", \"evidence\": \"<exaktes Zitat>\" },");
+        builder.AppendLine("    { \"id\": 15, \"match\": false, \"sentiment\": \"Neutral\", \"evidence\": \"\" }");
+        builder.AppendLine("  ],");
+        builder.AppendLine("  \"needsReview\": false");
+        builder.AppendLine("}");
+        builder.AppendLine();
+        builder.AppendLine("Codekandidaten:");
+
+        foreach (var candidate in candidates)
+        {
+            builder.AppendLine($"ID {candidate.Id}: {candidate.Code}");
+            builder.AppendLine($"Codegruppe: {candidate.CodeGroup}");
+            if (!string.IsNullOrWhiteSpace(candidate.CodingRule))
+            {
+                builder.AppendLine($"Waehlen bei: {NormalizeWhitespace(candidate.CodingRule)}");
+            }
+
+            var boundaryHint = CssCandidateKnowledgeBase.GetBoundaryHint(candidate.Id);
+            if (!string.IsNullOrWhiteSpace(boundaryHint))
+            {
+                builder.AppendLine($"Nicht waehlen bei / Abgrenzung: {boundaryHint}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(candidate.ExampleText))
+            {
+                builder.AppendLine($"Beispiele: {NormalizeWhitespace(candidate.ExampleText)}");
+            }
+
+            builder.AppendLine();
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    public string BuildCandidateRerankUserPrompt(
+        string statementText,
+        IReadOnlyList<CssCodeCandidate> candidates,
+        int? customerSatisfactionScore = null)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Pruefe jetzt alle Kandidaten und gib fuer jeden genau eine Entscheidung zurueck.");
+        builder.AppendLine($"Kandidaten-IDs: {string.Join(", ", candidates.Select(candidate => candidate.Id))}");
+
+        if (!string.IsNullOrWhiteSpace(_candidateSurveyContext))
+        {
+            builder.AppendLine();
+            builder.AppendLine("Umfragekontext:");
+            builder.AppendLine(_candidateSurveyContext);
+        }
+
+        AppendCustomerSatisfactionContext(builder, customerSatisfactionScore);
+        builder.AppendLine();
+        builder.AppendLine("Kundenaussage:");
+        builder.AppendLine(statementText);
+        builder.AppendLine();
+        builder.AppendLine("Antworte ausschliesslich mit dem geforderten JSON.");
         return builder.ToString().Trim();
     }
 
@@ -1421,9 +1531,17 @@ public sealed class CssCodebookPromptService
 
     private static string NormalizeMode(string? rawMode)
     {
-        return string.Equals(rawMode?.Trim(), SinglePassMode, StringComparison.OrdinalIgnoreCase)
-            ? SinglePassMode
-            : TwoStageMode;
+        if (string.Equals(rawMode?.Trim(), SinglePassMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return SinglePassMode;
+        }
+
+        if (string.Equals(rawMode?.Trim(), CandidateRerankMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return CandidateRerankMode;
+        }
+
+        return TwoStageMode;
     }
 
     private static CssCodebook LoadCodebook(IConfiguration config)
