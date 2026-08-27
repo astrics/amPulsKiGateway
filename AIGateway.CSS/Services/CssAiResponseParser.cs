@@ -77,12 +77,22 @@ public static class CssAiResponseParser
 
         foreach (var item in keywordElement.EnumerateArray())
         {
+            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var numericId) && numericId > 0)
+            {
+                keywords.Add(new AiKeyword { Id = numericId, Label = string.Empty });
+                continue;
+            }
+
             if (item.ValueKind == JsonValueKind.String)
             {
-                var label = item.GetString() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(label))
+                var stringValue = item.GetString() ?? string.Empty;
+                if (int.TryParse(stringValue, out var parsedId) && parsedId > 0)
                 {
-                    keywords.Add(new AiKeyword { Id = 0, Label = label });
+                    keywords.Add(new AiKeyword { Id = parsedId, Label = string.Empty });
+                }
+                else if (!string.IsNullOrWhiteSpace(stringValue))
+                {
+                    keywords.Add(new AiKeyword { Id = 0, Label = stringValue });
                 }
                 continue;
             }
@@ -108,6 +118,12 @@ public static class CssAiResponseParser
 
         foreach (var item in matchElement.EnumerateArray())
         {
+            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var numericId) && numericId > 0)
+            {
+                matches.Add(new AiCodeMatch { Id = numericId });
+                continue;
+            }
+
             if (item.ValueKind == JsonValueKind.String)
             {
                 var codeText = item.GetString() ?? string.Empty;
@@ -118,7 +134,8 @@ public static class CssAiResponseParser
                         Id = 0,
                         Code = codeText,
                         Sentiment = string.Empty,
-                        CodeGroup = string.Empty
+                        CodeGroup = string.Empty,
+                        Evidence = string.Empty
                     });
                 }
                 continue;
@@ -133,6 +150,7 @@ public static class CssAiResponseParser
             var codeGroup = ReadString(item, "codeGroup", "code_group", "group");
             var code = ReadString(item, "code", "label", "name");
             var sentiment = ReadString(item, "sentiment");
+            var evidence = ReadString(item, "evidence", "quote", "textEvidence", "text_evidence", "excerpt", "justification");
 
             if (id > 0 || !string.IsNullOrWhiteSpace(code))
             {
@@ -141,7 +159,8 @@ public static class CssAiResponseParser
                     Id = id,
                     CodeGroup = codeGroup,
                     Code = code,
-                    Sentiment = sentiment
+                    Sentiment = sentiment,
+                    Evidence = evidence
                 });
             }
         }
@@ -187,6 +206,10 @@ public static class CssAiResponseParser
                     if (idElement.ValueKind == JsonValueKind.Number && idElement.TryGetInt32(out var parsedId) && parsedId > 0)
                     {
                         matchedCodeIds.Add(parsedId);
+                    }
+                    else if (idElement.ValueKind == JsonValueKind.String && int.TryParse(idElement.GetString(), out var parsedStringId) && parsedStringId > 0)
+                    {
+                        matchedCodeIds.Add(parsedStringId);
                     }
                 }
             }

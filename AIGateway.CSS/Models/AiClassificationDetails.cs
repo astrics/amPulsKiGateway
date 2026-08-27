@@ -6,6 +6,7 @@ public class AiCodeMatch
     public string CodeGroup { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string Sentiment { get; set; } = "Neutral";
+    public string Evidence { get; set; } = string.Empty;
 }
 
 public class AiCodeGroupSentiment

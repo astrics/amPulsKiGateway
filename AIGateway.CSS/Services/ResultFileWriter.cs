@@ -43,7 +43,8 @@ public class ResultFileWriter
                         id = m.Id,
                         code_group = m.CodeGroup,
                         code = m.Code,
-                        sentiment = m.Sentiment
+                        sentiment = m.Sentiment,
+                        evidence = m.Evidence
                     }),
                     code_group_sentiments = r.CodeGroupSentiments.Select(g => new
                     {

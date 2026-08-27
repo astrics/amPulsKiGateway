@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using AiGateway.CSS.Api.Models;
 using AiGateway.CSS.Api.Services;
 
@@ -259,7 +259,8 @@ public class AnalysisController : ControllerBase
             Id = match.Id,
             CodeGroup = match.CodeGroup,
             Code = match.Code,
-            Sentiment = match.Sentiment
+            Sentiment = match.Sentiment,
+            Evidence = match.Evidence
         }).ToList() ?? new List<AiCodeMatch>();
     }
 
@@ -273,3 +274,4 @@ public class AnalysisController : ControllerBase
         }).ToList() ?? new List<AiCodeGroupSentiment>();
     }
 }
+
