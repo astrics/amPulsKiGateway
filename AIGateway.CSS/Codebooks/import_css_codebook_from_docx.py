@@ -75,49 +75,53 @@ def build_codebook_payload(source_document: Path, labels: list[dict[str, str | i
 
 
 def build_sql(project_ids: list[int], labels: list[dict[str, str | int]], source_document: Path) -> str:
-    lines: list[str] = []
-    lines.append("-- Generiert aus der Word-Codeliste")
-    lines.append(f"-- Quelle: {source_document}")
-    lines.append(f"-- Generiert am: {date.today().isoformat()}")
-    lines.append("-- Importiert die identischen CSS-Codes in die Projekte 4, 5 und 6.")
-    lines.append("")
-
+    # Match stable external numbers before labels: a renamed label must retain its
+    # keyword ID so existing statement assignments remain valid.
+    projects = ", ".join(str(project_id) for project_id in project_ids)
+    lines = [
+        "-- Generiert aus der Word-Codeliste",
+        f"-- Quelle: {source_document}",
+        f"-- Generiert am: {date.today().isoformat()}",
+        f"-- CSS-Projekte: {projects}. Bestehende IDs und Codierungen bleiben erhalten.",
+        "SET NAMES utf8mb4;",
+        "DROP TEMPORARY TABLE IF EXISTS css_codebook_update;",
+        "CREATE TEMPORARY TABLE css_codebook_update (",
+        "  external_code_nr VARCHAR(16) NOT NULL PRIMARY KEY,",
+        "  label VARCHAR(128) NOT NULL, codegruppe VARCHAR(256),",
+        "  beispiel TEXT, codierregel TEXT",
+        ") CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+        "INSERT INTO css_codebook_update VALUES",
+    ]
+    lines.append(",\n".join(
+        "  (" + ", ".join(sql_literal(str(label[key])) for key in
+        ("number", "code", "codeGroup", "exampleText", "codingRule")) + ")"
+        for label in labels
+    ) + ";")
+    lines += ["", "START TRANSACTION;"]
     for project_id in project_ids:
-        lines.append(f"-- Projekt {project_id}")
-        lines.append(
-            "INSERT INTO ai_keywords (project_id, external_code_nr, label, codegruppe, beispiel, codierregel, active, created_at)"
-        )
-        lines.append("VALUES")
+        lines += [
+            f"-- Projekt {project_id}",
+            "UPDATE ai_keywords k JOIN css_codebook_update c",
+            "  ON k.external_code_nr = c.external_code_nr",
+            "  OR ((k.external_code_nr IS NULL OR k.external_code_nr = '') AND k.label = c.label)",
+            "SET k.external_code_nr = c.external_code_nr, k.label = c.label,",
+            "    k.codegruppe = c.codegruppe, k.beispiel = c.beispiel, k.codierregel = c.codierregel",
+            f"WHERE k.project_id = {project_id};",
+            "INSERT INTO ai_keywords (project_id, external_code_nr, label, codegruppe, beispiel, codierregel, active, created_at)",
+            f"SELECT {project_id}, c.external_code_nr, c.label, c.codegruppe, c.beispiel, c.codierregel, 1, NOW()",
+            "FROM css_codebook_update c WHERE NOT EXISTS (",
+            f"  SELECT 1 FROM ai_keywords k WHERE k.project_id = {project_id}",
+            "    AND (k.external_code_nr = c.external_code_nr OR k.label = c.label)",
+            ");",
+            "",
+        ]
+    lines += [
+        "COMMIT;",
+        f"SELECT project_id, COUNT(*) AS code_count FROM ai_keywords WHERE project_id IN ({projects}) GROUP BY project_id;",
+        "DROP TEMPORARY TABLE css_codebook_update;",
+    ]
+    return "\n".join(lines) + "\n"
 
-        value_lines: list[str] = []
-        for label in labels:
-            value_lines.append(
-                "  ("
-                + ", ".join(
-                    [
-                        str(project_id),
-                        sql_literal(str(label["number"])),
-                        sql_literal(str(label["code"])),
-                        sql_literal(str(label["codeGroup"])),
-                        sql_literal(str(label["exampleText"])),
-                        sql_literal(str(label["codingRule"])),
-                        "1",
-                        "NOW()",
-                    ]
-                )
-                + ")"
-            )
-
-        lines.append(",\n".join(value_lines))
-        lines.append("ON DUPLICATE KEY UPDATE")
-        lines.append("  external_code_nr = VALUES(external_code_nr),")
-        lines.append("  codegruppe = VALUES(codegruppe),")
-        lines.append("  beispiel = VALUES(beispiel),")
-        lines.append("  codierregel = VALUES(codierregel),")
-        lines.append("  active = VALUES(active);")
-        lines.append("")
-
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def main() -> None:
@@ -131,7 +135,7 @@ def main() -> None:
         "--projects",
         nargs="+",
         type=int,
-        default=[4, 5, 6],
+        default=[4, 5, 6, 7, 8],
         help="Projekt-IDs, in die die Codes per SQL importiert werden sollen.",
     )
     args = parser.parse_args()

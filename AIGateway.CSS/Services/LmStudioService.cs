@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AiGateway.CSS.Api.Models;
+using AiGateway.Shared;
 
 namespace AiGateway.CSS.Api.Services;
 
@@ -157,18 +158,8 @@ public class LmStudioService
         var baseUrl = _config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         var model = _config["Gateway:ModelName"] ?? "default";
 
-        var payload = new
-        {
-            model,
-            messages = new[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
-            },
-            temperature = temperatureOverride ?? 0.1,
-            max_tokens = maxTokens,
-            response_format = new { type = "text" }
-        };
+        var payload = LmStudioGenerationSettings.CreatePayload(
+            _config, model, systemPrompt, userPrompt, phase, maxTokens, temperatureOverride);
 
         var json = JsonSerializer.Serialize(payload);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");

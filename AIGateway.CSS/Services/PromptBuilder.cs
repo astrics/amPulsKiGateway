@@ -1302,6 +1302,7 @@ public sealed class CssCodebookPromptService
         {
             builder.AppendLine($"- Zufriedenheitsscore 1-10: {customerSatisfactionScore.Value}");
             builder.AppendLine("- Nur Nebensignal fuer das Sentiment; bei Widerspruch hat der Text Vorrang.");
+            builder.AppendLine("- Bei mehrdeutigen Nennungen: 1-4 negativ, 5-7 neutral, 8-10 positiv.");
             return;
         }
 
@@ -1309,7 +1310,7 @@ public sealed class CssCodebookPromptService
         builder.AppendLine("- Nutze diesen Wert nur als unterstuetzendes Signal fuer das Sentiment.");
         builder.AppendLine("- Die Auswahl von Codegruppen und Codes muss primaer aus dem Text folgen.");
         builder.AppendLine("- Falls Text und Zufriedenheitsscore widerspruechlich sind, hat der Text Vorrang.");
-        builder.AppendLine("- Typische Tendenz: 1-4 eher negativ, 5-6 eher neutral oder ambivalent, 7-10 eher positiv.");
+        builder.AppendLine("- Bei mehrdeutigen Nennungen: 1-4 eher negativ, 5-7 eher neutral oder ambivalent, 8-10 eher positiv.");
     }
 
     private static string NormalizeSentiment(string? raw)

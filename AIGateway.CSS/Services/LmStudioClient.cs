@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AiGateway.CSS.Api.Models;
+using AiGateway.Shared;
 
 namespace AiGateway.CSS.Api.Services;
 
@@ -9,7 +10,7 @@ public class LmStudioClient : ILmStudioClient
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private readonly string _model;
-    private readonly double _temperature;
+    private readonly IConfiguration _config;
     private readonly double _candidateTemperature;
     private readonly LmStudioConcurrencyGate _concurrencyGate;
     private readonly CssCodebookPromptService _promptService;
@@ -25,7 +26,7 @@ public class LmStudioClient : ILmStudioClient
         _http = http;
         _baseUrl = config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         _model = config["Gateway:ModelName"] ?? "qwen2.5-7b-instruct";
-        _temperature = config.GetValue<double?>("Gateway:Temperature") ?? 0.1;
+        _config = config;
         _candidateTemperature = config.GetValue<double?>("CssCodebook:CandidateTemperature") ?? 0.0;
         _concurrencyGate = concurrencyGate;
         _promptService = promptService;
@@ -45,7 +46,7 @@ public class LmStudioClient : ILmStudioClient
 
     public async Task<string> ChatCompleteAsync(string systemPrompt, string userPrompt, CancellationToken ct)
     {
-        var responseJson = await SendChatCompletionAsync(systemPrompt, userPrompt, 1200, ct);
+        var responseJson = await SendChatCompletionAsync(systemPrompt, userPrompt, 1200, ct, phase: "chat");
 
         using var doc = JsonDocument.Parse(responseJson);
         var root = doc.RootElement;
@@ -92,7 +93,8 @@ public class LmStudioClient : ILmStudioClient
             _promptService.BuildCandidateRerankUserPrompt(statementText, candidates),
             1200,
             ct,
-            _candidateTemperature);
+            _candidateTemperature,
+            "candidate_rerank");
 
         var parsed = CssCandidateResponseParser.ParseCompletionResponse(
             responseJson,
@@ -122,7 +124,8 @@ public class LmStudioClient : ILmStudioClient
             _promptService.GetCodeGroupSystemPrompt(),
             _promptService.BuildCodeGroupUserPrompt(statementText),
             450,
-            ct);
+            ct,
+            phase: "codegroup_preselection");
 
         var preselection = CssAiResponseParser.ParseCompletionResponse(preselectionJson);
         preselection.Statement = string.IsNullOrWhiteSpace(preselection.Statement) ? statementText : preselection.Statement;
@@ -140,7 +143,8 @@ public class LmStudioClient : ILmStudioClient
             _promptService.BuildCodeSelectionSystemPrompt(selectedGroups),
             _promptService.BuildCodeSelectionUserPrompt(statementText, preselection.CodeGroupSentiments),
             900,
-            ct);
+            ct,
+            phase: "code_selection");
 
         var finalResult = CssAiResponseParser.ParseCompletionResponse(finalJson);
         finalResult.Statement = string.IsNullOrWhiteSpace(finalResult.Statement) ? statementText : finalResult.Statement;
@@ -197,22 +201,12 @@ public class LmStudioClient : ILmStudioClient
         string userPrompt,
         int maxTokens,
         CancellationToken ct,
-        double? temperatureOverride = null)
+        double? temperatureOverride = null,
+        string phase = "single_pass")
     {
         using var lease = await _concurrencyGate.EnterAsync(ct);
-        var requestBody = new
-        {
-            model = _model,
-            messages = new[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
-            },
-            temperature = temperatureOverride ?? _temperature,
-            max_tokens = maxTokens,
-            response_format = new { type = "text" },
-            stream = false
-        };
+        var requestBody = LmStudioGenerationSettings.CreatePayload(
+            _config, _model, systemPrompt, userPrompt, phase, maxTokens, temperatureOverride);
 
         var json = JsonSerializer.Serialize(requestBody);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");

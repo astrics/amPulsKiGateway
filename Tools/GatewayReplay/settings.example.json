@@ -1,0 +1,15 @@
+{
+  "model": "FILL: exact LM Studio model identifier",
+  "modelFile": "FILL: exact GGUF filename and SHA256",
+  "runtime": "FILL: LM Studio and llama.cpp/CUDA runtime versions",
+  "gatewayRevision": "FILL: git revision plus record of any uncommitted changes",
+  "promptAndCodebook": "FILL: SHA256 of deployed PromptBuilder.cs and codebook",
+  "classificationMode": "FILL: effective mode for the selected project",
+  "contextLength": 8192,
+  "temperature": 0.1,
+  "candidateTemperature": 0.0,
+  "responseTokenLimits": "FILL: effective per-phase limits",
+  "thinking": "FILL: verified disabled/enabled",
+  "gpuOffload": "FILL: actual offloaded layer count and GPU",
+  "parallelism": 1
+}

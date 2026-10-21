@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AiGateway.Sympany.Api.Models;
+using AiGateway.Shared;
 
 namespace AiGateway.Sympany.Api.Services;
 
@@ -21,7 +22,6 @@ public class LmStudioService
         _config = config;
         _logger = logger;
         _concurrencyGate = concurrencyGate;
-        _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
     public async Task<AiResult> AnalyzeSync(string text, CancellationToken cancellationToken = default)
@@ -29,18 +29,9 @@ public class LmStudioService
         var baseUrl = _config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         var model = _config["Gateway:ModelName"] ?? "default";
 
-        var payload = new
-        {
-            model,
-            messages = new[]
-            {
-                new { role = "system", content = PromptBuilder.GetSystemPrompt() },
-                new { role = "user", content = PromptBuilder.GetUserPrompt(text) }
-            },
-            temperature = 0.1,
-            max_tokens = 500,
-            response_format = new { type = "text" }
-        };
+        var payload = LmStudioGenerationSettings.CreatePayload(
+            _config, model, PromptBuilder.GetSystemPrompt(), PromptBuilder.GetUserPrompt(text),
+            "classification", defaultMaxTokens: 500);
 
         var json = JsonSerializer.Serialize(payload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");

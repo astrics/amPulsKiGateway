@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AiGateway.Shared;
 
 namespace AiGateway.Sympany.Api.Services;
 
@@ -8,7 +9,7 @@ public class LmStudioRuntimeClient : ILmStudioClient
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private readonly string _model;
-    private readonly double _temperature;
+    private readonly IConfiguration _config;
     private readonly LmStudioConcurrencyGate _concurrencyGate;
 
     public LmStudioRuntimeClient(
@@ -19,7 +20,7 @@ public class LmStudioRuntimeClient : ILmStudioClient
         _http = http;
         _baseUrl = config["Gateway:LmStudioBaseUrl"] ?? "http://localhost:1234";
         _model = config["Gateway:ModelName"] ?? "qwen2.5-7b-instruct";
-        _temperature = config.GetValue<double?>("Gateway:Temperature") ?? 0.1;
+        _config = config;
         _concurrencyGate = concurrencyGate;
     }
 
@@ -151,17 +152,8 @@ public class LmStudioRuntimeClient : ILmStudioClient
         CancellationToken ct)
     {
         using var lease = await _concurrencyGate.EnterAsync(ct);
-        var requestBody = new
-        {
-            model = _model,
-            messages = new[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
-            },
-            temperature = _temperature,
-            stream = false
-        };
+        var requestBody = LmStudioGenerationSettings.CreatePayload(
+            _config, _model, systemPrompt, userPrompt, "classification", defaultMaxTokens: null);
 
         var json = JsonSerializer.Serialize(requestBody);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");

@@ -74,7 +74,7 @@ internal static class CssCandidateKnowledgeBase
         [19] = "Nur Dauer der Leistungsabwicklung oder Rueckerstattung. Allgemeine Antwortzeit ist Code 15.",
         [20] = "Verstaendlichkeit oder Transparenz der Leistungsabrechnung. Falsche Abrechnung ist Code 21.",
         [23] = "Nur oeffentliche Homepage; App oder Kundenportal sind Codes 24/25.",
-        [24] = "Bedienbarkeit/Funktionen von App oder Portal. Technischer Defekt ist Code 25.",
+        [24] = "Allgemeines Feedback sowie Bedienbarkeit/Funktionen von App oder Portal. Technischer Defekt ist Code 25.",
         [25] = "Technische Stoerung, Login- oder Funktionsfehler. Reine Bedienbarkeit ist Code 24.",
         [27] = "Nur verwenden, wenn kein spezifischerer Code passt.",
         [32] = "Allgemeine Zufriedenheit. 'Keine Erfahrung/kann nichts sagen/keine Probleme' ist Code 33.",

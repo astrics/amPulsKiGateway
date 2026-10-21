@@ -1,0 +1,9 @@
+{
+  "description": "Synthetische Funktionstests. Keine fachliche Referenz fuer CSS-Codequalitaet.",
+  "cases": [
+    { "caseId": "de-positive", "language": "de", "text": "Die Bearbeitung ging schnell und alle waren freundlich.", "expectedSentiment": "Positiv" },
+    { "caseId": "fr-negative", "language": "fr", "text": "Je suis très déçu : personne ne répond à mes demandes.", "expectedSentiment": "Negativ" },
+    { "caseId": "it-positive", "language": "it", "text": "Sono molto soddisfatto del servizio rapido e cordiale.", "expectedSentiment": "Positiv" },
+    { "caseId": "en-negative", "language": "en", "text": "The service was terrible and I am very disappointed.", "expectedSentiment": "Negativ" }
+  ]
+}

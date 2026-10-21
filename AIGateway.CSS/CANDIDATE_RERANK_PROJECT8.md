@@ -35,11 +35,26 @@ Das idempotente SQL-Skript
 
 legt Projekt 8 bei Bedarf an, kopiert Codes und Aussagen aus Projekt 4 und setzt ausschliesslich die Projekt-8-Aussagen auf `new`. Andere Projekte werden nicht geloescht oder zurueckgesetzt.
 
-Der bestehende Cronjob kann anschliessend mit Projekt 8 verwendet werden, zum Beispiel:
+Anschliessend wird der eigene Projekt-8-Cronjob verwendet:
 
 ```text
-ampuls_ai_cronjob_project7.php?project_id=8&fetch_limit=50&send_limit=1&ignore_cache=1
+ampuls_ai_cronjob_project8.php?fetch_limit=50&send_limit=1&ignore_cache=1
 ```
+
+Der Cronjob ist fest auf Projekt 8 eingestellt. Ein eventuell uebergebener `project_id`-Parameter wird bewusst nicht ausgewertet, damit er nicht versehentlich ein anderes Projekt verarbeitet. Fuer Projekt 8 wird ausserdem eine eigene Lockdatei verwendet.
+
+## Ergebnisse visualisieren
+
+In `Analyse/index.php` steht Projekt 8 als `Projekt 8 - Candidate Rerank` zur Auswahl. Die vorhandenen Ansichten fuer Zusammenfassung, Einzelstatements und Variantenvergleich verwenden danach die Projekt-8-Ergebnisse.
+
+Der Variantenvergleich stellt Projekt 8 standardmaessig der Kundenbasis aus Projekt 4 gegenueber. Der gemeinsame Excel-Export unterstuetzt ebenfalls die Projekte 4 bis 8.
+
+Wenn die Gateway-Antwort Diagnosefelder enthaelt, zeigt die Analyse zusaetzlich:
+
+- Anzahl und Durchschnitt der Kandidatencodes
+- Anzahl und Quote der als `needsReview` markierten Statements
+- Validierungswarnungen
+- Kandidaten-IDs und Warnungen in der Statement-Einzelansicht
 
 ## Diagnose vor einem LLM-Lauf
 
