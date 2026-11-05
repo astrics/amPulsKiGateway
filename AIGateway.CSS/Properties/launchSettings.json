@@ -9,6 +9,17 @@
     }
   },
   "profiles": {
+    "CustomerRulesPilot": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "api/health",
+      "applicationUrl": "http://192.168.178.60:5000",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "CustomerRulesPilot",
+        "ASPNETCORE_ENVIRONMENT": "CustomerRulesPilot"
+      }
+    },
     "http": {
       "commandName": "Project",
       "dotnetRunMessages": true,
