@@ -13,6 +13,7 @@ public sealed class CssCodeCandidateRetriever
     private readonly Dictionary<string, int> _documentFrequency;
     private readonly int _initialCandidateCount;
     private readonly int _candidateLimit;
+    private readonly Dictionary<int, int> _candidateLimitByProject;
     private readonly ILogger<CssCodeCandidateRetriever> _logger;
 
     public CssCodeCandidateRetriever(
@@ -29,6 +30,10 @@ public sealed class CssCodeCandidateRetriever
             config.GetValue<int?>("CssCodebook:CandidateLimit") ?? 10,
             _initialCandidateCount,
             20);
+        _candidateLimitByProject = config.GetSection("CssCodebook:CandidateLimitByProject")
+            .GetChildren()
+            .Where(entry => int.TryParse(entry.Key, out _) && int.TryParse(entry.Value, out _))
+            .ToDictionary(entry => int.Parse(entry.Key), entry => Math.Clamp(int.Parse(entry.Value!), _initialCandidateCount, 20));
 
         _profiles = promptService.GetCodebookLabels()
             .Where(label => label.Number > 0)
@@ -48,7 +53,10 @@ public sealed class CssCodeCandidateRetriever
             _candidateLimit);
     }
 
-    public IReadOnlyList<CssCodeCandidate> Retrieve(string statementText)
+    public int ResolveCandidateLimit(int? projectId = null) =>
+        projectId.HasValue && _candidateLimitByProject.TryGetValue(projectId.Value, out var limit) ? limit : _candidateLimit;
+
+    public IReadOnlyList<CssCodeCandidate> Retrieve(string statementText, int? projectId = null)
     {
         var normalizedStatement = Normalize(statementText);
         var statementTokens = Tokenize(normalizedStatement).Distinct(StringComparer.Ordinal).ToList();
@@ -106,7 +114,7 @@ public sealed class CssCodeCandidateRetriever
         var result = selected.Values
             .OrderByDescending(candidate => candidate.Score)
             .ThenBy(candidate => candidate.Profile.Label.Number)
-            .Take(_candidateLimit)
+            .Take(ResolveCandidateLimit(projectId))
             .Select(ToCandidate)
             .ToList();
 

@@ -1,5 +1,9 @@
 # Wiederholbare Gateway- und Gesamtablauf-Tests
 
+Neustart-Anleitung fuer ASTRICSAI mit den konkreten LM-Studio-Einstellungen,
+Thinking-Template und Visual-Studio-Startprofil:
+[ASTRICSAI-NEUSTART.md](../../ASTRICSAI-NEUSTART.md).
+
 ## Lokaler Dump und echter Cronjob
 
 Die PHP-/DB-Simulation liegt im zweiten Workspace unter

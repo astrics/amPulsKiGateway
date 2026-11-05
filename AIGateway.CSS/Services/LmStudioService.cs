@@ -63,7 +63,7 @@ public class LmStudioService
         CancellationToken cancellationToken,
         int? projectId)
     {
-        var candidates = _candidateRetriever.Retrieve(text);
+        var candidates = _candidateRetriever.Retrieve(text, projectId);
         var responseBody = await SendChatCompletionAsync(
             _promptService.BuildCandidateRerankSystemPrompt(candidates, projectId),
             _promptService.BuildCandidateRerankUserPrompt(text, candidates, customerSatisfactionScore),

@@ -253,11 +253,12 @@ public class AnalysisController : ControllerBase
             return BadRequest(new { error = "Text darf nicht leer sein" });
         }
 
-        var candidates = _candidateRetriever.Retrieve(request.Text);
+        var candidates = _candidateRetriever.Retrieve(request.Text, request.ProjectId);
         return Ok(new
         {
             projectId = request.ProjectId,
             classificationMode = _lmStudio.ResolveClassificationMode(request.ProjectId),
+            candidateLimit = _candidateRetriever.ResolveCandidateLimit(request.ProjectId),
             statement = request.Text,
             candidateCodeIds = candidates.Select(candidate => candidate.Id),
             candidates = candidates.Select(candidate => new
