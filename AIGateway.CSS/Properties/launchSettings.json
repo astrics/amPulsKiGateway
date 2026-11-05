@@ -69,6 +69,17 @@
         "DOTNET_ENVIRONMENT": "Gemma4Pilot",
         "ASPNETCORE_ENVIRONMENT": "Gemma4Pilot"
       }
+    },
+    "Gemma4_20Pilot": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "api/health",
+      "applicationUrl": "http://192.168.178.60:5000",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Gemma4_20Pilot",
+        "ASPNETCORE_ENVIRONMENT": "Gemma4_20Pilot"
+      }
     }
   }
 }
