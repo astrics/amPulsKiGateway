@@ -1,6 +1,12 @@
 # ASTRICSAI: LM Studio und Gateway nach einem Neustart
 
-Aktuell vorbereiteter naechster Test: **Projekt 11**, Visual-Studio-Profil
+Naechster Modellvergleich: **Projekt 12 / Gemma4Pilot** mit Gemma 4 12B QAT Q4_0
+und Limit 14. Hierfuer die separate Anleitung im PHP-Repository
+`AI/PROJECT12_GEMMA4_TEST.md` verwenden. Das unten beschriebene Qwen-Chat-Template
+nicht auf Gemma uebertragen; GPU-Layerzahl und nativer Thinking-Modus sind
+modellspezifisch. Projekt 11 ist inzwischen abgeschlossen.
+
+Abgeschlossener Kandidatenvergleich: **Projekt 11**, Visual-Studio-Profil
 **CustomerRules20Pilot**. Es verwendet bis zu 20 Kandidaten ausschliesslich
 fuer Projekt 11, bei gleichen Modell-/Load-Einstellungen wie unten.
 `CustomerRulesPilot` bleibt die Variante fuer Projekt 10 mit Limit 14.

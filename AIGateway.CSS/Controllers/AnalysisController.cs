@@ -259,6 +259,7 @@ public class AnalysisController : ControllerBase
             projectId = request.ProjectId,
             classificationMode = _lmStudio.ResolveClassificationMode(request.ProjectId),
             candidateLimit = _candidateRetriever.ResolveCandidateLimit(request.ProjectId),
+            modelName = _config["Gateway:ModelName"],
             statement = request.Text,
             candidateCodeIds = candidates.Select(candidate => candidate.Id),
             candidates = candidates.Select(candidate => new
