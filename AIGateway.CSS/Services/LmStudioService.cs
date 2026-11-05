@@ -49,7 +49,7 @@ public class LmStudioService
 
         if (_promptService.UsesCandidateRerankClassificationForProject(projectId))
         {
-            return await AnalyzeCandidateRerankAsync(text, customerSatisfactionScore, cancellationToken);
+            return await AnalyzeCandidateRerankAsync(text, customerSatisfactionScore, cancellationToken, projectId);
         }
 
         return _promptService.UsesTwoStageClassificationForProject(projectId)
@@ -60,11 +60,12 @@ public class LmStudioService
     private async Task<AiResult> AnalyzeCandidateRerankAsync(
         string text,
         int? customerSatisfactionScore,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? projectId)
     {
         var candidates = _candidateRetriever.Retrieve(text);
         var responseBody = await SendChatCompletionAsync(
-            _promptService.BuildCandidateRerankSystemPrompt(candidates),
+            _promptService.BuildCandidateRerankSystemPrompt(candidates, projectId),
             _promptService.BuildCandidateRerankUserPrompt(text, candidates, customerSatisfactionScore),
             1200,
             "candidate_rerank",

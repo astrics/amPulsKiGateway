@@ -11,7 +11,7 @@ des produktiven Cronjobs. Dieser PowerShell-Replay-Runner bleibt fuer den
 isolierten Gateway-Test und Warm-up sinnvoll.
 
 Fuer ASTRICSAI gibt es jetzt `appsettings.VpnBenchmark.json` (LAN-IP
-192.168.178.60:5001, Modell qwen3.5-9b, Concurrency 1) und den Starter
+192.168.178.60:5000, Modell qwen3.5-9b, Concurrency 1) und den Starter
 `Start-CssGateway.ps1 -Profile VpnBenchmark -ModelName <API-Identifier>`.
 `-Profile Production` startet mit der bestehenden Produktivkonfiguration.
 Die beiden Starter variieren keine Prompts oder Codebuecher. Portfreigabe,

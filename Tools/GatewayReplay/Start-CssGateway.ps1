@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Production', 'VpnBenchmark')][string]$Profile,
+    [ValidateSet('Production', 'VpnBenchmark', 'CustomerRulesPilot')][string]$Profile,
     [string]$ModelName,
     [string]$RunLabel = 'pilot',
     [string]$DataRoot = 'D:/AI/Tests/Gateway'
@@ -23,7 +23,7 @@ try {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
     $env:DOTNET_ENVIRONMENT = $Profile
     $env:ASPNETCORE_ENVIRONMENT = $Profile
-    if ($Profile -eq 'VpnBenchmark') {
+    if ($Profile -in @('VpnBenchmark', 'CustomerRulesPilot')) {
         if ($RunLabel -notmatch '^[a-zA-Z0-9_-]+$') { throw 'RunLabel may contain letters, digits, _ and - only.' }
         if (-not [IO.Path]::IsPathRooted($DataRoot)) { throw 'DataRoot must be an absolute path.' }
         $folder = $DataRoot.TrimEnd('/', '\') + '/' + $RunLabel
@@ -32,7 +32,7 @@ try {
         $env:Storage__ResultsPath = $folder + '/results'
         if ($ModelName) { $env:Gateway__ModelName = $ModelName }
     } elseif ($ModelName) {
-        throw 'ModelName is only supported for VpnBenchmark. Production uses its existing configuration.'
+        throw 'ModelName is only supported for test profiles. Production uses its existing configuration.'
     }
     & dotnet run --no-launch-profile --project (Join-Path $repoRoot 'AIGateway.CSS/AiGateway.CSS.Api.csproj')
     if ($LASTEXITCODE -ne 0) { throw "Gateway exited with code $LASTEXITCODE." }
