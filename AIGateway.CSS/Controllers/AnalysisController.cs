@@ -259,6 +259,8 @@ public class AnalysisController : ControllerBase
             projectId = request.ProjectId,
             classificationMode = _lmStudio.ResolveClassificationMode(request.ProjectId),
             candidateLimit = _candidateRetriever.ResolveCandidateLimit(request.ProjectId),
+            allCandidates = _candidateRetriever.UsesAllCandidates(request.ProjectId),
+            responseTokenLimit = _config.GetValue<int?>("Gateway:ResponseTokenLimits:candidate_rerank"),
             modelName = _config["Gateway:ModelName"],
             statement = request.Text,
             candidateCodeIds = candidates.Select(candidate => candidate.Id),

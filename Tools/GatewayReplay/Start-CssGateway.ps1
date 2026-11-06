@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Production', 'VpnBenchmark', 'CustomerRulesPilot', 'CustomerRules20Pilot', 'Gemma4Pilot', 'Gemma4_20Pilot')][string]$Profile,
+    [ValidateSet('Production', 'VpnBenchmark', 'CustomerRulesPilot', 'CustomerRules20Pilot', 'Gemma4Pilot', 'Gemma4_20Pilot', 'Gemma4_AllCodesPilot')][string]$Profile,
     [string]$ModelName,
     [string]$RunLabel = 'pilot',
     [string]$DataRoot = 'D:/AI/Tests/Gateway'
@@ -23,7 +23,7 @@ try {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
     $env:DOTNET_ENVIRONMENT = $Profile
     $env:ASPNETCORE_ENVIRONMENT = $Profile
-    if ($Profile -in @('VpnBenchmark', 'CustomerRulesPilot', 'CustomerRules20Pilot', 'Gemma4Pilot', 'Gemma4_20Pilot')) {
+    if ($Profile -in @('VpnBenchmark', 'CustomerRulesPilot', 'CustomerRules20Pilot', 'Gemma4Pilot', 'Gemma4_20Pilot', 'Gemma4_AllCodesPilot')) {
         if ($RunLabel -notmatch '^[a-zA-Z0-9_-]+$') { throw 'RunLabel may contain letters, digits, _ and - only.' }
         if (-not [IO.Path]::IsPathRooted($DataRoot)) { throw 'DataRoot must be an absolute path.' }
         $folder = $DataRoot.TrimEnd('/', '\') + '/' + $RunLabel

@@ -97,6 +97,27 @@ var gemma20Retriever = new CssCodeCandidateRetriever(gemma20Prompts, gemma20Conf
 Check(gemma20Prompts.ResolveClassificationMode(13) == "candidate_rerank" && gemma20Retriever.ResolveCandidateLimit(13) == 20 && gemma20Retriever.ResolveCandidateLimit(12) == 14, "Gemma 20 profile project isolation failed.");
 Check(gemma20Config["Gateway:ModelName"] == gemmaConfig["Gateway:ModelName"] && gemma20Config["Gateway:ResponseTokenLimits:candidate_rerank"] == "1536"
     && gemma20Config["Gateway:MaxConcurrency"] == "1" && gemma20Prompts.BuildCandidateRerankSystemPrompt(candidates, 13) == updated, "Project 13 changed settings beyond candidate limit.");
+var allConfig = new ConfigurationBuilder().AddJsonFile(Path.Combine(root, "AIGateway.CSS/appsettings.json"))
+    .AddJsonFile(Path.Combine(root, "AIGateway.CSS/appsettings.Gemma4_AllCodesPilot.json")).Build();
+var allPrompts = new CssCodebookPromptService(allConfig, NullLogger<CssCodebookPromptService>.Instance);
+var allRetriever = new CssCodeCandidateRetriever(allPrompts, allConfig, NullLogger<CssCodeCandidateRetriever>.Instance);
+Check(allPrompts.ResolveClassificationMode(14) == "candidate_rerank", "Project 14 mode missing.");
+Check(allRetriever.UsesAllCandidates(14) && allRetriever.ResolveCandidateLimit(14) == 38, "Project 14 must offer all 38 codes.");
+Check(!allRetriever.UsesAllCandidates(13) && !allRetriever.UsesAllCandidates(), "All-code selection leaked to other projects.");
+foreach(var text in new[] { sample, "x", "", "Je suis déçu", "Sono soddisfatto" }) {
+    var all = allRetriever.Retrieve(text, 14);
+    Check(all.Count == 38 && all.Select(c => c.Id).Distinct().Count() == 38 && all.Select(c => c.Id).Order().SequenceEqual(candidates.Select(c => c.Id).Order()), "All-code mode omitted or duplicated a code.");
+    var old = allRetriever.Retrieve(text).Select(c => c.Id);
+    Check(all.Take(old.Count()).Select(c => c.Id).SequenceEqual(old), "Existing ranked candidate prefix changed.");
+}
+Check(allPrompts.BuildCandidateRerankSystemPrompt(candidates, 14) == updated, "Project 14 changed customer instructions.");
+Check(allConfig["Gateway:MaxConcurrency"] == "1" && allConfig["Gateway:ResponseTokenLimits:candidate_rerank"] == "4096", "Project 14 capacity settings missing.");
+var allService = new LmStudioService(http, allConfig, NullLogger<LmStudioService>.Instance, gate, allPrompts, allRetriever);
+await allService.AnalyzeSync("Soweit alles in Ordnung. Der persönliche Kontakt fehlt.", projectId: 14);
+using var allBody = JsonDocument.Parse(handler.LastBody!);
+Check(allBody.RootElement.GetProperty("max_tokens").GetInt32() == 4096 && allBody.RootElement.GetProperty("temperature").GetDouble() == 0, "All-code request lost its generation settings.");
+var fullPrompt = allPrompts.BuildCandidateRerankSystemPrompt(allRetriever.Retrieve(sample, 14), 14);
+Console.WriteLine($"Project 14: 38 codes; system prompt {fullPrompt.Length} characters. This is not a tokenizer measurement.");
 Console.WriteLine($"PASS: {checks} checks; baseline isolation, sync routing, code sentiments and compatibility aggregation. No real model called.");
 
 sealed class FixtureHandler : HttpMessageHandler

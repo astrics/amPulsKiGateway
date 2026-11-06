@@ -14,6 +14,7 @@ public sealed class CssCodeCandidateRetriever
     private readonly int _initialCandidateCount;
     private readonly int _candidateLimit;
     private readonly Dictionary<int, int> _candidateLimitByProject;
+    private readonly HashSet<int> _allCandidatesProjects;
     private readonly ILogger<CssCodeCandidateRetriever> _logger;
 
     public CssCodeCandidateRetriever(
@@ -34,6 +35,7 @@ public sealed class CssCodeCandidateRetriever
             .GetChildren()
             .Where(entry => int.TryParse(entry.Key, out _) && int.TryParse(entry.Value, out _))
             .ToDictionary(entry => int.Parse(entry.Key), entry => Math.Clamp(int.Parse(entry.Value!), _initialCandidateCount, 20));
+        _allCandidatesProjects = config.GetSection("CssCodebook:AllCandidatesProjects").Get<int[]>()?.ToHashSet() ?? [];
 
         _profiles = promptService.GetCodebookLabels()
             .Where(label => label.Number > 0)
@@ -54,7 +56,10 @@ public sealed class CssCodeCandidateRetriever
     }
 
     public int ResolveCandidateLimit(int? projectId = null) =>
+        UsesAllCandidates(projectId) ? _profiles.Count :
         projectId.HasValue && _candidateLimitByProject.TryGetValue(projectId.Value, out var limit) ? limit : _candidateLimit;
+
+    public bool UsesAllCandidates(int? projectId = null) => projectId.HasValue && _allCandidatesProjects.Contains(projectId.Value);
 
     public IReadOnlyList<CssCodeCandidate> Retrieve(string statementText, int? projectId = null)
     {
@@ -111,9 +116,15 @@ public sealed class CssCodeCandidateRetriever
             }
         }
 
-        var result = selected.Values
+        // Retain the existing candidate order, then append every remaining code.
+        // Raising the limit alone would still omit codes absent from the expanded pool.
+        var ranked = selected.Values
             .OrderByDescending(candidate => candidate.Score)
-            .ThenBy(candidate => candidate.Profile.Label.Number)
+            .ThenBy(candidate => candidate.Profile.Label.Number).ToList();
+        if (UsesAllCandidates(projectId))
+            ranked.AddRange(scored.Where(candidate => !selected.ContainsKey(candidate.Profile.Label.Number))
+                .Select(candidate => new MutableCandidate(candidate.Profile, candidate.Score, candidate.MatchedTerms)));
+        var result = ranked
             .Take(ResolveCandidateLimit(projectId))
             .Select(ToCandidate)
             .ToList();

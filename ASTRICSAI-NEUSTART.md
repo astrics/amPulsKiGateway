@@ -1,10 +1,35 @@
 # ASTRICSAI: LM Studio und Gateway nach einem Neustart
 
-Naechster Modellvergleich: **Projekt 12 / Gemma4Pilot** mit Gemma 4 12B QAT Q4_0
-und Limit 14. Hierfuer die separate Anleitung im PHP-Repository
-`AI/PROJECT12_GEMMA4_TEST.md` verwenden. Das unten beschriebene Qwen-Chat-Template
-nicht auf Gemma uebertragen; GPU-Layerzahl und nativer Thinking-Modus sind
-modellspezifisch. Projekt 11 ist inzwischen abgeschlossen.
+**Vorbereitet: Projekt 14 / Gemma4_AllCodesPilot**, alle 38 Codes. Anleitung
+im PHP-Repository: `AI/PROJECT14_GEMMA4_ALL_CODES_TEST.md`. Hierfuer Gemma mit
+Context 16384 neu laden; Thinking bleibt explizit false. Das neue Profil hat
+Antwortlimit 4096 und Concurrency 1. Vor dem vollstaendigen Test muessen
+Prompt-Tokenzahl, GPU-Speicher und eine vollstaendige JSON-Antwort geprueft
+werden. Die bisherigen Werte 8192/1536 gelten weiterhin fuer Projekt 13.
+
+Aktuelle Testkonfiguration: **Projekt 13 / Gemma4_20Pilot** mit Gemma 4 12B QAT Q4_0
+und Limit 20. Anleitung im PHP-Repository:
+`AI/PROJECT13_GEMMA4_CANDIDATES20_TEST.md`. Projekt 12 bleibt der Gemma-Vergleich
+mit Limit 14; zwei vollstaendige Laeufe lieferten identische Codes und
+Code-Sentiments. Auch Projekt 13 hat zwei vollstaendige Ergebnisbestaende mit
+identischen Codes und Code-Sentiments fuer alle 143 Aussagen. Die Wiederholung
+wurde nach einem dokumentierten Transportfehler bei Fall 95 fortgesetzt,
+ohne Modellanfragen zu wiederholen. Dies ist kein kontrollierter Neustarttest.
+Die fachliche Referenz fuer alle Projekte ist Projekt 4.
+
+Fuer den aktuellen Gemma-Start: Modell `gemma-4-12b-it-qat`, Context 8192,
+GPU-Offload 48, CPU Threads 6, Evaluation Batch 2048, Physical Batch 512,
+Max Concurrent Predictions 1. Flash Attention, GPU-KV-Offload, Unified KV Cache,
+Keep Model in Memory und mmap einschalten; Speculative Decoding ausschalten.
+Im nativen Gemma-Chat-Template die Setup-Zeile auf
+`{%- set enable_thinking = false -%}` setzen, speichern und Modell neu laden.
+Die Variante mit `default(false)` reicht bei einer uebergebenen True-Einstellung
+nicht. Danach LM-Studio-API auf Port 1234 und Gateway-Profil `Gemma4_20Pilot`
+starten. Health allein bestaetigt nicht, dass eine vollstaendige JSON-Antwort
+ohne Thinking erzeugt wird; vor einem grossen Lauf eine Klassifikation pruefen.
+
+Die folgenden Qwen-Einstellungen sind fuer die frueheren Vergleichsprofile.
+Das Qwen-Chat-Template nicht auf Gemma uebertragen.
 
 Abgeschlossener Kandidatenvergleich: **Projekt 11**, Visual-Studio-Profil
 **CustomerRules20Pilot**. Es verwendet bis zu 20 Kandidaten ausschliesslich
@@ -16,7 +41,7 @@ Die Schrittfolge fuer Projekt 11 steht im PHP-Repository unter
 Stand: 05.11.2026. Vorlage fuer den lokalen Projekt-10-Test mit Qwen3.5-9B
 auf RTX 5060 Ti mit 16 GB VRAM. Werte aus dem bereitgestellten Screenshot
 und dem Gateway-Testprofil. Das ist die wiederherzustellende Konfiguration;
-ein erfolgreicher vollstaendiger Projekt-10-Lauf steht noch aus.
+die vollstaendigen Projekt-10- und Projekt-11-Laeufe sind abgeschlossen.
 
 ## Kurzablauf
 
