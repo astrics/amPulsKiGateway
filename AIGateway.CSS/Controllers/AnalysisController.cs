@@ -246,7 +246,7 @@ public class AnalysisController : ControllerBase
     }
 
     [HttpPost("candidate-preview")]
-    public IActionResult PreviewCandidates([FromBody] SyncAnalyzeRequest request)
+    public IActionResult PreviewCandidates([FromBody] SyncAnalyzeRequest request, [FromServices] CssCodebookPromptService prompts)
     {
         if (string.IsNullOrWhiteSpace(request.Text))
         {
@@ -254,12 +254,17 @@ public class AnalysisController : ControllerBase
         }
 
         var candidates = _candidateRetriever.Retrieve(request.Text, request.ProjectId);
+        var prompt = prompts.BuildCandidateRerankSystemPrompt(candidates, request.ProjectId);
+        // Normalize line endings so the fingerprint identifies the prompt across hosts.
+        var promptBytes = System.Text.Encoding.UTF8.GetBytes(prompt.ReplaceLineEndings("\n"));
         return Ok(new
         {
             projectId = request.ProjectId,
             classificationMode = _lmStudio.ResolveClassificationMode(request.ProjectId),
             candidateLimit = _candidateRetriever.ResolveCandidateLimit(request.ProjectId),
             allCandidates = _candidateRetriever.UsesAllCandidates(request.ProjectId),
+            customerFeedbackEnabled = prompts.UsesCustomerFeedback(request.ProjectId),
+            systemPromptSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(promptBytes)),
             responseTokenLimit = _config.GetValue<int?>("Gateway:ResponseTokenLimits:candidate_rerank"),
             modelName = _config["Gateway:ModelName"],
             statement = request.Text,

@@ -263,10 +263,13 @@ public sealed class CssCodebookPromptService
         return builder.ToString().Trim();
     }
 
+    public bool UsesCustomerFeedback(int? projectId) => projectId is int id
+        && _customerRulesProjects.Contains(id) && _customerFeedbackProjects.Contains(id);
+
     public string BuildCandidateRerankSystemPrompt(IReadOnlyList<CssCodeCandidate> candidates, int? projectId = null)
     {
         var customerRules = projectId.HasValue && _customerRulesProjects.Contains(projectId.Value);
-        var customerFeedback = customerRules && _customerFeedbackProjects.Contains(projectId!.Value);
+        var customerFeedback = UsesCustomerFeedback(projectId);
         var builder = new StringBuilder();
         builder.AppendLine("Du klassifizierst genau eine offene Kundenaussage einer Krankenversicherung.");
         builder.AppendLine("Pruefe jeden bereitgestellten CSS-Codekandidaten unabhaengig mit match=true oder match=false.");
