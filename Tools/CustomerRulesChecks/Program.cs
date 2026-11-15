@@ -96,7 +96,12 @@ var gemma20Prompts = new CssCodebookPromptService(gemma20Config, NullLogger<CssC
 var gemma20Retriever = new CssCodeCandidateRetriever(gemma20Prompts, gemma20Config, NullLogger<CssCodeCandidateRetriever>.Instance);
 Check(gemma20Prompts.ResolveClassificationMode(13) == "candidate_rerank" && gemma20Retriever.ResolveCandidateLimit(13) == 20 && gemma20Retriever.ResolveCandidateLimit(12) == 14, "Gemma 20 profile project isolation failed.");
 Check(gemma20Config["Gateway:ModelName"] == gemmaConfig["Gateway:ModelName"] && gemma20Config["Gateway:ResponseTokenLimits:candidate_rerank"] == "1536"
-    && gemma20Config["Gateway:MaxConcurrency"] == "1" && gemma20Prompts.BuildCandidateRerankSystemPrompt(candidates, 13) == updated, "Project 13 changed settings beyond candidate limit.");
+    && gemma20Config["Gateway:MaxConcurrency"] == "1", "Project 13 generation settings changed.");
+var feedbackPrompt = gemma20Prompts.BuildCandidateRerankSystemPrompt(candidates, 13);
+Check(feedbackPrompt.Contains("38/Positiv und 24/Positiv") && feedbackPrompt.Contains("32/Positiv und 33/Neutral")
+    && !feedbackPrompt.Contains("Nicht zusaetzlich zu bereits konkret beschriebenen Serviceaspekten vergeben"),
+    "Project 13 must apply both customer clarifications without the conflicting old rule.");
+Check(gemma20Prompts.BuildCandidateRerankSystemPrompt(candidates, 12) == updated, "Project 13 follow-up leaked to project 12.");
 var allConfig = new ConfigurationBuilder().AddJsonFile(Path.Combine(root, "AIGateway.CSS/appsettings.json"))
     .AddJsonFile(Path.Combine(root, "AIGateway.CSS/appsettings.Gemma4_AllCodesPilot.json")).Build();
 var allPrompts = new CssCodebookPromptService(allConfig, NullLogger<CssCodebookPromptService>.Instance);

@@ -1,11 +1,13 @@
 # ASTRICSAI: LM Studio und Gateway nach einem Neustart
 
-**Vorbereitet: Projekt 14 / Gemma4_AllCodesPilot**, alle 38 Codes. Anleitung
+**Abgeschlossen: Projekt 14 / Gemma4_AllCodesPilot**, alle 38 Codes. Anleitung
 im PHP-Repository: `AI/PROJECT14_GEMMA4_ALL_CODES_TEST.md`. Hierfuer Gemma mit
 Context 16384 neu laden; Thinking bleibt explizit false. Das neue Profil hat
-Antwortlimit 4096 und Concurrency 1. Vor dem vollstaendigen Test muessen
-Prompt-Tokenzahl, GPU-Speicher und eine vollstaendige JSON-Antwort geprueft
-werden. Die bisherigen Werte 8192/1536 gelten weiterhin fuer Projekt 13.
+Antwortlimit 4096 und Concurrency 1. Der Lauf ist mit 143 Ergebnissen und
+geprueftem Rueckimport abgeschlossen. Auf diesem Bestand ist Projekt 13
+insgesamt besser und schneller; es bleibt die bevorzugte Vergleichsbasis.
+Fuer den Rueckwechsel zu Projekt 13 wieder Context 8192 und Profil
+`Gemma4_20Pilot` verwenden. Vor einem neuen Lauf Profil und Antwort pruefen.
 
 Aktuelle Testkonfiguration: **Projekt 13 / Gemma4_20Pilot** mit Gemma 4 12B QAT Q4_0
 und Limit 20. Anleitung im PHP-Repository:

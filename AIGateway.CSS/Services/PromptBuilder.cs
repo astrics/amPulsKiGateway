@@ -24,6 +24,7 @@ public sealed class CssCodebookPromptService
     private readonly Dictionary<int, string> _classificationModeByProject;
     private readonly string _candidateSurveyContext;
     private readonly HashSet<int> _customerRulesProjects;
+    private readonly HashSet<int> _customerFeedbackProjects;
     private readonly string _promptVariant;
     private readonly int _maxCodeGroupsPerStatement;
     private readonly int _maxCodingRuleLength;
@@ -52,6 +53,7 @@ public sealed class CssCodebookPromptService
         _customerRulesProjects = config.GetSection("CssCodebook:CustomerRules20261030Projects")
             .GetChildren().Select(entry => int.TryParse(entry.Value, out var id) ? id : 0)
             .Where(id => id > 0).ToHashSet();
+        _customerFeedbackProjects = config.GetSection("CssCodebook:CustomerFeedbackProjects").Get<int[]>()?.ToHashSet() ?? [];
         _promptVariant = NormalizePromptVariant(config["CssCodebook:PromptVariant"]);
         _maxCodeGroupsPerStatement = Math.Max(1, config.GetValue<int?>("CssCodebook:MaxCodeGroupsPerStatement") ?? 3);
         _maxCodingRuleLength = Math.Max(80, config.GetValue<int?>("CssCodebook:MaxCodingRuleLength") ?? GetDefaultCodingRuleLength(_promptVariant));
@@ -264,6 +266,7 @@ public sealed class CssCodebookPromptService
     public string BuildCandidateRerankSystemPrompt(IReadOnlyList<CssCodeCandidate> candidates, int? projectId = null)
     {
         var customerRules = projectId.HasValue && _customerRulesProjects.Contains(projectId.Value);
+        var customerFeedback = customerRules && _customerFeedbackProjects.Contains(projectId!.Value);
         var builder = new StringBuilder();
         builder.AppendLine("Du klassifizierst genau eine offene Kundenaussage einer Krankenversicherung.");
         builder.AppendLine("Pruefe jeden bereitgestellten CSS-Codekandidaten unabhaengig mit match=true oder match=false.");
@@ -280,6 +283,7 @@ public sealed class CssCodebookPromptService
         builder.AppendLine("- Der Zufriedenheitsscore darf nur das Sentiment beeinflussen, niemals die Codeauswahl.");
         builder.AppendLine();
         if (customerRules) CssCustomerRules20261030.AppendInstructions(builder);
+        if (customerFeedback) CssCustomerRules20261030.AppendFollowUpInstructions(builder);
         builder.AppendLine("Ausgabe ausschliesslich als JSON in dieser Form:");
         builder.AppendLine("{");
         builder.AppendLine("  \"decisions\": [");
@@ -296,6 +300,7 @@ public sealed class CssCodebookPromptService
             builder.AppendLine($"ID {candidate.Id}: {candidate.Code}");
             builder.AppendLine($"Codegruppe: {candidate.CodeGroup}");
             var codingRule = customerRules ? CssCustomerRules20261030.CodingRule(candidate.Id) ?? candidate.CodingRule : candidate.CodingRule;
+            if (customerFeedback) codingRule = CssCustomerRules20261030.FollowUpRule(candidate.Id) ?? codingRule;
             if (!string.IsNullOrWhiteSpace(codingRule))
             {
                 builder.AppendLine($"Waehlen bei: {NormalizeWhitespace(codingRule)}");
@@ -304,6 +309,7 @@ public sealed class CssCodebookPromptService
             var boundaryHint = customerRules
                 ? CssCustomerRules20261030.Boundary(candidate.Id) ?? CssCandidateKnowledgeBase.GetBoundaryHint(candidate.Id)
                 : CssCandidateKnowledgeBase.GetBoundaryHint(candidate.Id);
+            if (customerFeedback) boundaryHint = CssCustomerRules20261030.FollowUpBoundary(candidate.Id) ?? boundaryHint;
             if (!string.IsNullOrWhiteSpace(boundaryHint))
             {
                 builder.AppendLine($"Nicht waehlen bei / Abgrenzung: {boundaryHint}");

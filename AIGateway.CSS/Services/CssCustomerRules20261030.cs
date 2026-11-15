@@ -4,6 +4,28 @@ namespace AiGateway.CSS.Api.Services;
 
 internal static class CssCustomerRules20261030
 {
+    public static string? FollowUpRule(int id) => id switch
+    {
+        33 => "Ausdruecklich fehlende oder geringe Erfahrung als eigenen Aspekt kodieren, auch neben einer verwertbaren Bewertung mit Code 32. Ein Wechsel allein belegt noch keine geringe Erfahrung. Ohne eigene Bewertung der Erfahrung ist das Sentiment fuer 33 Neutral.",
+        38 => "Ausdrueckliche allgemeine Bewertung des Kundendiensts kodieren, wenn sie einen eigenen Aspekt bildet. Separat genannte Themen, etwa die App, erhalten daneben ihren eigenen Code.",
+        _ => null
+    };
+
+    public static string? FollowUpBoundary(int id) => id switch
+    {
+        33 => "Eine vorhandene Bewertung schliesst 33 bei ausdruecklich geringer Erfahrung nicht aus.",
+        38 => "38 bleibt fuer allgemeine Kundenservice-Aussagen reserviert. Einen bereits spezifisch kodierten Serviceaspekt nicht nochmals als 38 kodieren. Eine eigenstaendige allgemeine Servicebewertung kann daneben stehen.",
+        _ => null
+    };
+
+    public static void AppendFollowUpInstructions(StringBuilder builder)
+    {
+        builder.AppendLine("Ergaenzung zur Kundenabstimmung:");
+        builder.AppendLine("- Eigenstaendige allgemeine Bewertung des Kundendiensts auch neben getrennten Themen als 38 kodieren, etwa 'Der Kundenservice ist prima. Das Portal ist auch gut' => 38/Positiv und 24/Positiv.");
+        builder.AppendLine("- Ausdruecklich geringe Erfahrung auch neben einer Bewertung kodieren, etwa 'Bisher sehr zufrieden, fuer ein Urteil habe ich aber noch zu wenig Erfahrung' => 32/Positiv und 33/Neutral.");
+        builder.AppendLine();
+    }
+
     public static string? CodingRule(int id) => id switch
     {
         15 => "Bewertung der Antwort- oder Loesungsdauer (z.B. schnell, zu lange, 14 Tage sind zu lang) oder wiederholte Kontaktaufnahme. Bei einer bloss ausbleibenden Antwort ohne Dauerbewertung nur Code 17. Rueckerstattungsdauer gehoert zu 19.",
