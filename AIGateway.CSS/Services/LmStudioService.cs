@@ -64,9 +64,11 @@ public class LmStudioService
         int? projectId)
     {
         var candidates = _candidateRetriever.Retrieve(text, projectId);
+        var systemPrompt = _promptService.BuildCandidateRerankSystemPrompt(candidates, projectId);
+        var userPrompt = _promptService.BuildCandidateRerankUserPrompt(text, candidates, customerSatisfactionScore);
         var responseBody = await SendChatCompletionAsync(
-            _promptService.BuildCandidateRerankSystemPrompt(candidates, projectId),
-            _promptService.BuildCandidateRerankUserPrompt(text, candidates, customerSatisfactionScore),
+            systemPrompt,
+            userPrompt,
             1200,
             "candidate_rerank",
             cancellationToken,
@@ -76,7 +78,9 @@ public class LmStudioService
             responseBody,
             text,
             candidates,
-            _logger);
+            _logger,
+            systemPrompt,
+            userPrompt);
         _promptService.NormalizeResult(result);
 
         _logger.LogInformation(

@@ -9,7 +9,9 @@ public static class CssCandidateResponseParser
         string responseBody,
         string statementText,
         IReadOnlyList<CssCodeCandidate> candidates,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        string? systemPrompt = null,
+        string? userPrompt = null)
     {
         var candidateIds = candidates.Select(candidate => candidate.Id).Distinct().OrderBy(id => id).ToList();
 
@@ -21,6 +23,18 @@ public static class CssCandidateResponseParser
                 .GetProperty("message")
                 .GetProperty("content")
                 .GetString() ?? "{}";
+
+            if (messageContent.StartsWith("<bos><|turn>system\n", StringComparison.Ordinal))
+            {
+                if (systemPrompt is null || userPrompt is null)
+                    throw new JsonException("The Gemma response contains an unverified prompt echo.");
+
+                var prefix = $"<bos><|turn>system\n{systemPrompt.Trim()}<turn|>\n<|turn>user\n{userPrompt.Trim()}<turn|>\n<|turn>model\n";
+                if (!messageContent.StartsWith(prefix, StringComparison.Ordinal))
+                    throw new JsonException("The echoed Gemma prompt does not match the request.");
+
+                messageContent = messageContent[prefix.Length..];
+            }
 
             return ParseMessageContent(messageContent, statementText, candidateIds, logger);
         }

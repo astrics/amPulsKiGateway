@@ -88,9 +88,11 @@ public class LmStudioClient : ILmStudioClient
     private async Task<AiResult> ClassifyCandidateRerankAsync(string statementText, CancellationToken ct)
     {
         var candidates = _candidateRetriever.Retrieve(statementText);
+        var systemPrompt = _promptService.BuildCandidateRerankSystemPrompt(candidates);
+        var userPrompt = _promptService.BuildCandidateRerankUserPrompt(statementText, candidates);
         var responseJson = await SendChatCompletionAsync(
-            _promptService.BuildCandidateRerankSystemPrompt(candidates),
-            _promptService.BuildCandidateRerankUserPrompt(statementText, candidates),
+            systemPrompt,
+            userPrompt,
             1200,
             ct,
             _candidateTemperature,
@@ -99,7 +101,9 @@ public class LmStudioClient : ILmStudioClient
         var parsed = CssCandidateResponseParser.ParseCompletionResponse(
             responseJson,
             statementText,
-            candidates);
+            candidates,
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt);
         _promptService.NormalizeResult(parsed);
         return parsed;
     }

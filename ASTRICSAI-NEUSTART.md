@@ -6,8 +6,8 @@ Context 16384 neu laden; Thinking bleibt explizit false. Das neue Profil hat
 Antwortlimit 4096 und Concurrency 1. Der Lauf ist mit 143 Ergebnissen und
 geprueftem Rueckimport abgeschlossen. Auf diesem Bestand ist Projekt 13
 insgesamt besser und schneller; es bleibt die bevorzugte Vergleichsbasis.
-Fuer den Rueckwechsel zu Projekt 13 wieder Context 8192 und Profil
-`Gemma4_20Pilot` verwenden. Vor einem neuen Lauf Profil und Antwort pruefen.
+Fuer Projekt 13 das Profil `Gemma4_20Pilot` und den Kontextwert aus dem
+folgenden Abschnitt verwenden. Vor einem neuen Lauf Profil und Antwort pruefen.
 
 Aktuelle Testkonfiguration: **Projekt 13 / Gemma4_20Pilot** mit Gemma 4 12B QAT Q4_0
 und Limit 20. Anleitung im PHP-Repository:
@@ -19,7 +19,8 @@ wurde nach einem dokumentierten Transportfehler bei Fall 95 fortgesetzt,
 ohne Modellanfragen zu wiederholen. Dies ist kein kontrollierter Neustarttest.
 Die fachliche Referenz fuer alle Projekte ist Projekt 4.
 
-Fuer den aktuellen Gemma-Start: Modell `gemma-4-12b-it-qat`, Context 8192,
+Fuer den aktuellen Gemma-Start mit ergaenzten Kundenregeln: Modell
+`gemma-4-12b-it-qat`, Context 16384 (bisheriger Vergleichslauf: 8192),
 GPU-Offload 48, CPU Threads 6, Evaluation Batch 2048, Physical Batch 512,
 Max Concurrent Predictions 1. Flash Attention, GPU-KV-Offload, Unified KV Cache,
 Keep Model in Memory und mmap einschalten; Speculative Decoding ausschalten.

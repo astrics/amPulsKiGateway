@@ -102,6 +102,23 @@ Check(feedbackPrompt.Contains("38/Positiv und 24/Positiv") && feedbackPrompt.Con
     && !feedbackPrompt.Contains("Nicht zusaetzlich zu bereits konkret beschriebenen Serviceaspekten vergeben"),
     "Project 13 must apply both customer clarifications without the conflicting old rule.");
 Check(gemma20Prompts.BuildCandidateRerankSystemPrompt(candidates, 12) == updated, "Project 13 follow-up leaked to project 12.");
+const string echoStatement = "Gute online Lösungen, Preise";
+var echoCandidates = gemma20Retriever.Retrieve(echoStatement, 13);
+var echoSystem = gemma20Prompts.BuildCandidateRerankSystemPrompt(echoCandidates, 13);
+var echoUser = gemma20Prompts.BuildCandidateRerankUserPrompt(echoStatement, echoCandidates, 8);
+if (args.Length > 1)
+{
+    var log = File.ReadAllText(args[1]);
+    var completion = log[log.IndexOf('{')..];
+    var parsedEcho = CssCandidateResponseParser.ParseCompletionResponse(
+        completion, echoStatement, echoCandidates, systemPrompt: echoSystem, userPrompt: echoUser);
+    Check(parsedEcho.ParseError is null && parsedEcho.ValidationWarnings.Count == 0
+        && parsedEcho.CodeMatches.Select(match => match.Id).Order().SequenceEqual(new[] { 6, 24 }),
+        $"Captured Gemma reply failed: {parsedEcho.ParseError ?? string.Join(',', parsedEcho.ValidationWarnings)}");
+    var unverifiedEcho = CssCandidateResponseParser.ParseCompletionResponse(
+        completion, echoStatement, echoCandidates, systemPrompt: echoSystem, userPrompt: echoUser + " altered");
+    Check(unverifiedEcho.ParseError is not null, "Echo with a mismatched prompt was accepted.");
+}
 var allConfig = new ConfigurationBuilder().AddJsonFile(Path.Combine(root, "AIGateway.CSS/appsettings.json"))
     .AddJsonFile(Path.Combine(root, "AIGateway.CSS/appsettings.Gemma4_AllCodesPilot.json")).Build();
 var allPrompts = new CssCodebookPromptService(allConfig, NullLogger<CssCodebookPromptService>.Instance);
