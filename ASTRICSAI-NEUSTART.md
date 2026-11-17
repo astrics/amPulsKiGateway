@@ -24,6 +24,10 @@ Fuer den aktuellen Gemma-Start mit ergaenzten Kundenregeln: Modell
 GPU-Offload 48, CPU Threads 6, Evaluation Batch 2048, Physical Batch 512,
 Max Concurrent Predictions 1. Flash Attention, GPU-KV-Offload, Unified KV Cache,
 Keep Model in Memory und mmap einschalten; Speculative Decoding ausschalten.
+`Max Concurrent Predictions` in LM Studio ist eine eigene Ladeeinstellung.
+Vor und nach jedem Neustart pruefen, dass dort **1** aktiv ist. Der Gateway-Wert
+`MaxConcurrency: 1` im Profil `Gemma4_20Pilot` setzt diesen LM-Studio-Wert nicht.
+Nach einer Aenderung das Modell entladen und mit den neuen Werten neu laden.
 Im nativen Gemma-Chat-Template die Setup-Zeile auf
 `{%- set enable_thinking = false -%}` setzen, speichern und Modell neu laden.
 Die Variante mit `default(false)` reicht bei einer uebergebenen True-Einstellung
