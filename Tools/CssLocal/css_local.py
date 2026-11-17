@@ -36,6 +36,11 @@ def open_db(root):
     db.row_factory = sqlite3.Row
     db.executescript("""
         CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS deliveries (
+            filename TEXT PRIMARY KEY,
+            source_sha256 TEXT NOT NULL,
+            output_sha256 TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS answers (
             id INTEGER PRIMARY KEY,
             intnr INTEGER NOT NULL,
@@ -344,6 +349,60 @@ def export_data(db, source, target):
     print(f"Verified {n} SPSS rows with {len(names)} additional variables: {target}")
 
 
+def file_sha256(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def process_inbox(db, root, endpoint, rules, seed):
+    inbox, done, outbox = (root / name for name in ("Inbox", "_done", "Outbox"))
+    staging = root / ".export-staging"
+    for directory in (inbox, done, outbox, staging):
+        directory.mkdir(exist_ok=True)
+    pending = []
+    for source in sorted(inbox.glob("*.sav")):
+        digest = file_sha256(source)
+        archive = done / source.name
+        output = outbox / f"{source.stem} - CSS kodiert.sav"
+        receipt = db.execute("SELECT * FROM deliveries WHERE filename=?", (source.name,)).fetchone()
+        if receipt is not None and receipt["source_sha256"] != digest:
+            raise ValueError(f"Different delivery already recorded as {source.name}")
+        if archive.exists():
+            if receipt is None or file_sha256(archive) != digest:
+                raise ValueError(f"Archive filename already in use: {archive}")
+            print(f"Already archived: {source.name}; repeated copy left in Inbox")
+            continue
+        if output.exists() and (receipt is None or file_sha256(output) != receipt["output_sha256"]):
+            raise ValueError(f"Output filename already in use: {output}")
+        pending.append((source, digest, archive, output, receipt))
+    if not pending:
+        print("No new SAV deliveries in Inbox")
+        return
+
+    import_data(db, [source for source, *_ in pending], seed)
+    classify(db, endpoint, rules, -1)
+    for source, digest, archive, output, receipt in pending:
+        if file_sha256(source) != digest:
+            raise ValueError(f"Source changed during processing: {source}")
+        stage = staging / f"{source.stem}-{digest}.sav"
+        if not output.exists():
+            if not stage.exists():
+                if receipt is not None:
+                    raise ValueError(f"Restore the previously verified output before archiving: {output}")
+                export_data(db, source, stage)
+            output_digest = file_sha256(stage)
+            if file_sha256(source) != digest:
+                raise ValueError(f"Source changed during export: {source}")
+            if receipt is None:
+                with db:
+                    db.execute("INSERT INTO deliveries VALUES (?,?,?)", (source.name, digest, output_digest))
+            elif receipt["output_sha256"] != output_digest:
+                raise ValueError(f"Previously verified output is missing or changed: {output}")
+            stage.rename(output)
+        source.rename(archive)
+        print(f"Archived: {archive} | Export: {output}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("D:/AI/Data/CSS"))
@@ -355,11 +414,26 @@ def main():
     runner.add_argument("--rules", type=Path, required=True)
     runner.add_argument("--gateway", default="http://127.0.0.1:5000/api")
     runner.add_argument("--limit", type=int, default=-1)
+    runner.add_argument("--export", action="append", nargs=2, type=Path, default=[],
+                        metavar=("SOURCE", "TARGET"), help="Write a SAV copy after all pending answers are coded")
     exporter = actions.add_parser("export")
     exporter.add_argument("source", type=Path)
     exporter.add_argument("target", type=Path)
+    inbox_runner = actions.add_parser("process-inbox", help="Import, classify, export and archive SAV deliveries")
+    inbox_runner.add_argument("--seed", type=Path)
+    inbox_runner.add_argument("--rules", type=Path, required=True)
+    inbox_runner.add_argument("--gateway", default="http://127.0.0.1:5000/api")
     actions.add_parser("status")
     args = parser.parse_args()
+    if args.action == "classify" and args.export:
+        if args.limit != -1:
+            parser.error("--export requires a complete classification run without --limit")
+        targets = set()
+        for source, target in args.export:
+            resolved = target.resolve()
+            if not source.is_file() or target.exists() or not target.parent.is_dir() or resolved in targets:
+                parser.error(f"Invalid source or output path: {source} -> {target}")
+            targets.add(resolved)
     args.root.mkdir(parents=True, exist_ok=True)
     with locked(args.root), closing(open_db(args.root)) as db:
         if args.action == "import":
@@ -369,8 +443,12 @@ def main():
             import_data(db, paths, args.seed)
         elif args.action == "classify":
             classify(db, args.gateway, args.rules, args.limit)
+            for source, target in args.export:
+                export_data(db, source, target)
         elif args.action == "export":
             export_data(db, args.source, args.target)
+        elif args.action == "process-inbox":
+            process_inbox(db, args.root, args.gateway, args.rules, args.seed)
         else:
             for row in db.execute("SELECT month,COUNT(*) total,COUNT(result) completed FROM answers GROUP BY month ORDER BY month"):
                 print(dict(row))

@@ -56,6 +56,35 @@ seinem Ergebnisverzeichnis und die lokale SQLite-Datei beibehalten.
 
 ## SPSS-Datei erzeugen
 
+Für die Produktionsablage ist `process-inbox` der vollständige Ablauf.
+Lege fertig kopierte Original-SAVs unter `Inbox` ab und starte auf ASTRICSAI:
+
+```powershell
+$env:CSS_GATEWAY_API_KEY = Read-Host 'API-Key des CSS-Gateways' -MaskInput
+py -3.12 $cssRunner --root $cssData process-inbox --seed "$cssData/october-results.json" --rules "$cssData/manual-rules-20261106.json"
+Remove-Item Env:CSS_GATEWAY_API_KEY
+```
+
+Der Befehl importiert alle SAV-Dateien aus `Inbox`. Überschneidungen werden
+je Aussage anhand des Importschlüssels geprüft. Nach der Kodierung
+entsteht pro Original eine geprüfte Datei `<Name> - CSS kodiert.sav` in
+`Outbox`. Danach wird das Original mit seinem Namen nach `_done`
+verschoben. Die SQLite-Datenbank hält die Prüfsummen beider Dateien fest.
+Nach einer Unterbrechung denselben Befehl erneut ausführen. Bereits
+archivierte, identisch erneut abgelegte Dateien werden gemeldet und bleiben
+zur manuellen Klärung in `Inbox`. Namenskonflikte mit abweichendem Inhalt
+halten den Lauf an.
+
+Mit `--export` schreibt der vollständige Kodierlauf die angereicherte SAV
+direkt nach Abschluss aller offenen Aussagen. Bei mehreren gewünschten
+Ausgaben kann `--export QUELLE ZIEL` wiederholt werden.
+
+```powershell
+py -3.12 $cssRunner --root $cssData classify --rules "$cssData/manual-rules-20261106.json" --export "$cssData/Inbox/kont WT.sav" "$cssData/kont WT - CSS kodiert.sav"
+```
+
+Für einen späteren Einzel-Export aus gespeicherten Ergebnissen:
+
 ```powershell
 py -3.12 $cssRunner --root $cssData export "$cssData/Inbox/kont WT.sav" "$cssData/kont WT - CSS kodiert.sav"
 ```
