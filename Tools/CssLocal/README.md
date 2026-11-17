@@ -59,6 +59,13 @@ seinem Ergebnisverzeichnis und die lokale SQLite-Datei beibehalten.
 Für die Produktionsablage ist `process-inbox` der vollständige Ablauf.
 Lege fertig kopierte Original-SAVs unter `Inbox` ab und starte auf ASTRICSAI:
 
+**Per Doppelklick:** `Tools\CssLocal\Start-CSS.cmd` starten. Der Launcher
+verwendet `D:\AI\Data\CSS`, zeigt den Fortschritt im Konsolenfenster
+und fragt bei Bedarf verdeckt nach dem Gateway-Key. Python 3.12, die oben
+genannten Python-Pakete und das laufende Gateway-Profil sind dafür erforderlich.
+
+**Per PowerShell:**
+
 ```powershell
 $env:CSS_GATEWAY_API_KEY = Read-Host 'API-Key des CSS-Gateways' -MaskInput
 py -3.12 $cssRunner --root $cssData process-inbox --seed "$cssData/october-results.json" --rules "$cssData/manual-rules-20261106.json"

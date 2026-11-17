@@ -1,6 +1,7 @@
 """Import CSS SAV files, classify new answers on the local gateway, and export SAV copies."""
 import argparse
 from contextlib import closing, contextmanager
+from getpass import getpass
 import hashlib
 import json
 import os
@@ -176,8 +177,10 @@ def manual_result(rules, row):
     return {"codes": codes, "review": False, "rule": [rule["id"], rule["revision"]]}
 
 
-def gateway_client(endpoint):
+def gateway_client(endpoint, prompt_key=False):
     key = os.environ.get("CSS_GATEWAY_API_KEY")
+    if not key and prompt_key:
+        key = getpass("API-Key des CSS-Gateways: ")
     if not key:
         raise ValueError("Set CSS_GATEWAY_API_KEY for the active CSS profile")
     opener = build_opener(ProxyHandler({}))
@@ -239,7 +242,7 @@ def lower_keys(value):
     return value
 
 
-def classify(db, endpoint, rule_path, limit):
+def classify(db, endpoint, rule_path, limit, prompt_key=False):
     pending = db.execute("SELECT * FROM answers WHERE result IS NULL ORDER BY id LIMIT ?", (limit,)).fetchall()
     if not pending:
         print("All imported answers already have results")
@@ -254,7 +257,7 @@ def classify(db, endpoint, rule_path, limit):
         result = manual_result(rules, row)
         if result is None:
             if call is None:
-                call = gateway_client(endpoint)
+                call = gateway_client(endpoint, prompt_key)
                 preview = call("/analysis/candidate-preview", {
                     "projectId": 13, "text": "Der Kundenservice war freundlich."
                 })
@@ -354,7 +357,7 @@ def file_sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def process_inbox(db, root, endpoint, rules, seed):
+def process_inbox(db, root, endpoint, rules, seed, prompt_key=False):
     inbox, done, outbox = (root / name for name in ("Inbox", "_done", "Outbox"))
     staging = root / ".export-staging"
     for directory in (inbox, done, outbox, staging):
@@ -380,7 +383,7 @@ def process_inbox(db, root, endpoint, rules, seed):
         return
 
     import_data(db, [source for source, *_ in pending], seed)
-    classify(db, endpoint, rules, -1)
+    classify(db, endpoint, rules, -1, prompt_key)
     for source, digest, archive, output, receipt in pending:
         if file_sha256(source) != digest:
             raise ValueError(f"Source changed during processing: {source}")
@@ -423,6 +426,7 @@ def main():
     inbox_runner.add_argument("--seed", type=Path)
     inbox_runner.add_argument("--rules", type=Path, required=True)
     inbox_runner.add_argument("--gateway", default="http://127.0.0.1:5000/api")
+    inbox_runner.add_argument("--prompt-key", action="store_true", help="Ask for the gateway key when needed")
     actions.add_parser("status")
     args = parser.parse_args()
     if args.action == "classify" and args.export:
@@ -448,7 +452,7 @@ def main():
         elif args.action == "export":
             export_data(db, args.source, args.target)
         elif args.action == "process-inbox":
-            process_inbox(db, args.root, args.gateway, args.rules, args.seed)
+            process_inbox(db, args.root, args.gateway, args.rules, args.seed, args.prompt_key)
         else:
             for row in db.execute("SELECT month,COUNT(*) total,COUNT(result) completed FROM answers GROUP BY month ORDER BY month"):
                 print(dict(row))
