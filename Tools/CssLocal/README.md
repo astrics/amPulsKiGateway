@@ -40,6 +40,14 @@ entspricht das etwa 29 Stunden reiner Modelllaufzeit.
 
 ## Kodieren
 
+Nach einer Regeländerung im Web unter **Einstellungen → CSS-Textregeln**
+die aktiven Regeln herunterladen und als `D:/AI/Data/CSS/manual-rules.json`
+ablegen. `Start-CSS.cmd` bevorzugt diese Datei und verwendet sonst den
+Snapshot vom 6. November. Im Konsolenfenster stehen Dateiname, Anzahl
+und SHA-256 des verwendeten Regelstands. Pro Aufruf wird die Datei einmal
+gelesen. Der nächste Start übernimmt Änderungen für noch offene Aussagen.
+Bereits gespeicherte Ergebnisse behalten ihre Kodierung.
+
 ```powershell
 $env:CSS_GATEWAY_API_KEY = Read-Host 'API-Key des CSS-Gateways' -MaskInput
 py -3.12 $cssRunner --root $cssData classify --rules "$cssData/manual-rules-20261106.json" --limit 10
@@ -51,7 +59,8 @@ Der erste Aufruf kodiert bis zu zehn noch offene Aussagen zur Kontrolle.
 Der zweite verarbeitet den Rest. Exakte Kundenregeln greifen vor dem
 Modellaufruf. Jeder abgeschlossene Fall wird sofort gespeichert. Bei
 Unterbrechung denselben Befehl mit derselben Datenbank, demselben Gateway-
-Profil und Regelstand wiederholen. Während eines Laufs den Gateway mit
+Profil wiederholen. Für denselben Regelstand dieselbe JSON-Datei verwenden.
+Während eines Laufs den Gateway mit
 seinem Ergebnisverzeichnis und die lokale SQLite-Datei beibehalten.
 
 ## SPSS-Datei erzeugen

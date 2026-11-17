@@ -26,7 +26,9 @@ if /i "%~1"=="--check" (
     echo Python und CSS-Pakete sind einsatzbereit.
     exit /b 0
 )
-"%CSS_PYTHON%" %PY_ARGS% -u -X utf8 "%~dp0css_local.py" --root "%CSS_ROOT%" process-inbox --seed "%CSS_ROOT%\october-results.json" --rules "%CSS_ROOT%\manual-rules-20261106.json" --prompt-key
+set "CSS_RULES=%CSS_ROOT%\manual-rules.json"
+if not exist "%CSS_RULES%" set "CSS_RULES=%CSS_ROOT%\manual-rules-20261106.json"
+"%CSS_PYTHON%" %PY_ARGS% -u -X utf8 "%~dp0css_local.py" --root "%CSS_ROOT%" process-inbox --seed "%CSS_ROOT%\october-results.json" --rules "%CSS_RULES%" --prompt-key
 set "CSS_EXIT=%ERRORLEVEL%"
 if not "%CSS_EXIT%"=="0" echo Verarbeitung unterbrochen. Exitcode: %CSS_EXIT%
 pause

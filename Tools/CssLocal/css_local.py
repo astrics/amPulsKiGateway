@@ -194,6 +194,10 @@ def gateway_client(endpoint, prompt_key=False):
     return call
 
 
+class UnusableGatewayResult(ValueError):
+    """The gateway replied, but the individual answer has no usable coding."""
+
+
 def gateway_result(call, row, dashboard):
     gateway_id = GATEWAY_ID_BASE + row["id"]
     if gateway_id > 2147483647:
@@ -201,37 +205,47 @@ def gateway_result(call, row, dashboard):
     path = f"/analysis/result/{gateway_id}?dashboard={dashboard}&projectId=13"
 
     def read_saved():
-        saved = call(path)
+        try:
+            saved = call(path)
+        except HTTPError as error:
+            if error.code != 404:
+                raise
+            return None, "Gateway-Ergebnis nicht gefunden (HTTP 404)"
         saved = lower_keys(saved)
         if (saved.get("statementId"), saved.get("projectId"), saved.get("dashboard"), saved.get("text")) != (
             gateway_id, 13, dashboard, row["text"]
         ):
             # The endpoint can fall back to the shared store and return another dashboard's ID.
             if saved.get("dashboard") != dashboard:
-                return None
+                return None, "Gateway-Ergebnis gehört zu einem anderen Lauf"
             raise ValueError(f"Gateway result does not match local row {row['id']}")
-        if saved.get("status") != "completed" or saved.get("parseError") or saved.get("errorMessage") or saved.get("cachedFrom"):
-            return None
-        return compact_result(saved)
+        if saved.get("parseError"):
+            return None, "Gateway meldet einen Parserfehler"
+        if saved.get("status") != "completed" or saved.get("errorMessage"):
+            return None, "Gateway-Ergebnis ist im Fehlerstatus oder unvollständig"
+        if saved.get("cachedFrom"):
+            return None, "Gateway hat ein Cache-Ergebnis geliefert"
+        return compact_result(saved), ""
 
-    try:
-        saved = read_saved()
-    except HTTPError as error:
-        if error.code != 404:
-            raise
-        saved = None
+    saved, _ = read_saved()
     if saved is not None:
         return saved
-    response = call("/analysis/analyze", {
+    request = {
         "statementId": gateway_id, "projectId": 13, "dashboard": dashboard,
         "text": row["text"], "customerSatisfactionScore": row["score"], "ignoreCache": True,
-    })
-    if response.get("status") != "completed" or response.get("cached") is not False:
-        raise ValueError(f"Gateway failed for local row {row['id']}")
-    saved = read_saved()
-    if saved is None:
-        raise ValueError(f"No valid stored coding for local row {row['id']}; restart the run to retry")
-    return saved
+    }
+    label = f"Zeile {row['id']} (INTNR {row['intnr']}, Monat {row['month']}, Gateway-ID {gateway_id})"
+    for attempt in (1, 2):
+        response = call("/analysis/analyze", request)
+        if response.get("status") != "completed" or response.get("cached") is not False:
+            reason = "Gateway meldet keine neue abgeschlossene Kodierung"
+        else:
+            saved, reason = read_saved()
+            if saved is not None:
+                return saved
+        if attempt == 1:
+            print(f"{label}: {reason}. Ein neuer Versuch folgt.", flush=True)
+    raise UnusableGatewayResult(f"{label}: {reason}")
 
 
 def lower_keys(value):
@@ -249,10 +263,25 @@ def classify(db, endpoint, rule_path, limit, prompt_key=False):
         return
     rule_bytes = rule_path.read_bytes()
     rules = json.loads(rule_bytes)
-    remember(db, "manual rules", hashlib.sha256(rule_bytes).hexdigest())
+    if not isinstance(rules, dict):
+        raise ValueError("The manual rule snapshot must be a JSON object")
+    for text, rule in rules.items():
+        if (not text or not isinstance(rule, dict) or not isinstance(rule.get("codes"), dict)
+                or not rule["codes"] or type(rule.get("id")) is not int or rule["id"] < 1
+                or type(rule.get("revision")) is not int or rule["revision"] < 1
+                or any(code not in CODES or not (sentiment in SENTIMENT
+                       or (code == "6" and sentiment == "kuzu_price"))
+                       for code, sentiment in rule["codes"].items())):
+            raise ValueError("Invalid entry in manual rule snapshot")
+    rule_hash = hashlib.sha256(rule_bytes).hexdigest()
+    with db:
+        db.execute("INSERT OR REPLACE INTO settings VALUES ('manual rules', ?)", (rule_hash,))
+    print(f"Manual rules: {len(rules)} active from {rule_path.name} (SHA-256 {rule_hash})", flush=True)
     dashboard = db.execute("SELECT value FROM settings WHERE name='dashboard'").fetchone()[0]
     call = None
     total = len(pending)
+    saved_count = 0
+    failures = []
     for index, row in enumerate(pending, 1):
         result = manual_result(rules, row)
         if result is None:
@@ -264,10 +293,19 @@ def classify(db, endpoint, rule_path, limit, prompt_key=False):
                 if any(preview.get(key) != value for key, value in PROFILE.items()):
                     raise ValueError("Active gateway is not the expected Gemma4_20Pilot configuration")
                 remember(db, "gateway prompt", preview["systemPromptSha256"])
-            result = gateway_result(call, row, dashboard)
+            try:
+                result = gateway_result(call, row, dashboard)
+            except UnusableGatewayResult as error:
+                failures.append(str(error))
+                print(f"Fall bleibt offen: {error}", flush=True)
+                continue
         with db:
             db.execute("UPDATE answers SET result=? WHERE id=? AND result IS NULL", (check_result(result), row["id"]))
-        print(f"{index}/{total} stored", flush=True)
+        saved_count += 1
+        print(f"{index}/{total} geprüft · {saved_count} gespeichert", flush=True)
+    if failures:
+        raise SystemExit("Kodierung beendet, offene Fehlerfälle. SAV-Ausgabe und Archivierung warten:\n"
+                         + "\n".join(failures))
 
 
 def export_data(db, source, target):
