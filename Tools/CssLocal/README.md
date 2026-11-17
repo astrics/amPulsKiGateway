@@ -63,6 +63,11 @@ Lege fertig kopierte Original-SAVs unter `Inbox` ab und starte auf ASTRICSAI:
 verwendet `D:\AI\Data\CSS`, zeigt den Fortschritt im Konsolenfenster
 und fragt bei Bedarf verdeckt nach dem Gateway-Key. Python 3.12, die oben
 genannten Python-Pakete und das laufende Gateway-Profil sind dafür erforderlich.
+Der Launcher funktioniert auch ohne `py`, wenn Python 3.12 im Standardordner,
+über `python` im Suchpfad oder als `D:\AI\Data\CSS\.venv\Scripts\python.exe`
+verfügbar ist. Für einen abweichenden Installationspfad kann die
+Umgebungsvariable `CSS_PYTHON` auf die vollständige `python.exe` zeigen.
+`Start-CSS.cmd --check` prüft Python und die Pakete ohne einen Import zu starten.
 
 **Per PowerShell:**
 
