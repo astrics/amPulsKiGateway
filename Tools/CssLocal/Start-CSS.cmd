@@ -26,11 +26,19 @@ if /i "%~1"=="--check" (
     echo Python und CSS-Pakete sind einsatzbereit.
     exit /b 0
 )
+if /i "%~1"=="--october-test" goto october_test
 set "CSS_RULES=%CSS_ROOT%\manual-rules.json"
 if not exist "%CSS_RULES%" set "CSS_RULES=%CSS_ROOT%\manual-rules-20261106.json"
 "%CSS_PYTHON%" %PY_ARGS% -u -X utf8 "%~dp0css_local.py" --root "%CSS_ROOT%" process-inbox --seed "%CSS_ROOT%\october-results.json" --rules "%CSS_RULES%" --prompt-key
 set "CSS_EXIT=%ERRORLEVEL%"
 if not "%CSS_EXIT%"=="0" echo Verarbeitung unterbrochen. Exitcode: %CSS_EXIT%
+pause
+exit /b %CSS_EXIT%
+
+:october_test
+"%CSS_PYTHON%" %PY_ARGS% -u -X utf8 "%~dp0test_october.py" --data "%CSS_ROOT%"
+set "CSS_EXIT=%ERRORLEVEL%"
+if not "%CSS_EXIT%"=="0" echo Oktober-Test unterbrochen. Exitcode: %CSS_EXIT%
 pause
 exit /b %CSS_EXIT%
 

@@ -256,7 +256,7 @@ def lower_keys(value):
     return value
 
 
-def classify(db, endpoint, rule_path, limit, prompt_key=False):
+def classify(db, endpoint, rule_path, limit, prompt_key=False, required_feedback_revision=None):
     pending = db.execute("SELECT * FROM answers WHERE result IS NULL ORDER BY id LIMIT ?", (limit,)).fetchall()
     if not pending:
         print("All imported answers already have results")
@@ -292,6 +292,8 @@ def classify(db, endpoint, rule_path, limit, prompt_key=False):
                 })
                 if any(preview.get(key) != value for key, value in PROFILE.items()):
                     raise ValueError("Active gateway is not the expected Gemma4_20Pilot configuration")
+                if required_feedback_revision is not None and preview.get("customerFeedbackRevision") != required_feedback_revision:
+                    raise ValueError("Transfer the updated gateway sources and restart Gemma4_20Pilot before this test")
                 remember(db, "gateway prompt", preview["systemPromptSha256"])
             try:
                 result = gateway_result(call, row, dashboard)
@@ -337,7 +339,7 @@ def export_data(db, source, target):
             raise ValueError(f"No matching completed result for {key}; no export written")
         result = json.loads(row["result"])
         check_result(result)
-        extra.at[index, "CSS_STATUS"] = 2 if result["review"] else 1
+        extra.at[index, "CSS_STATUS"] = 2 if result["review"] else (1 if result["codes"] else 3)
         for code, sentiment in result["codes"].items():
             extra.at[index, f"CSS_C{int(code):02}"] = 1
             extra.at[index, f"CSS_S{int(code):02}"] = SENTIMENT[sentiment]
@@ -351,7 +353,8 @@ def export_data(db, source, target):
             output.at[0, name] = value + " " * max(0, width - len(value.encode("utf-8")))
     labels = {**metadata.column_names_to_labels, **names}
     values = dict(metadata.variable_value_labels)
-    values["CSS_STATUS"] = {0: "Ausgeschlossen", 1: "Kodiert", 2: "Prüfen"}
+    values["CSS_STATUS"] = {0: "Ausgeschlossen", 1: "Kodiert mit Code", 2: "Prüfen",
+                            3: "Verarbeitet – ohne Code"}
     for code in CODES:
         values[f"CSS_C{int(code):02}"] = {0: "Nicht vergeben", 1: "Vergeben"}
         values[f"CSS_S{int(code):02}"] = {value: label for label, value in SENTIMENT.items()}

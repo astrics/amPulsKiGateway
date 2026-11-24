@@ -40,6 +40,28 @@ entspricht das etwa 29 Stunden reiner Modelllaufzeit.
 
 ## Kodieren
 
+### Oktober-Test nach Kundenrückmeldung vom 24. November
+
+Den aktualisierten Gateway mit `Gemma4_20Pilot` neu bauen und starten.
+Die Dateien `Start-CSS.cmd`, `Test-Oktober.cmd`, `test_october.py`
+und `css_local.py` gemeinsam nach `Tools/CssLocal` übertragen.
+`manual-rules-20261124.json` und `october-results.json` liegen unter
+`D:/AI/Data/CSS`. Den Oktober-Test mit Doppelklick auf `Test-Oktober.cmd`
+starten. Das Original wird in `Inbox` oder `_done` gesucht.
+
+Der Test verwendet `D:/AI/Data/CSS/Tests/October-20261124` mit einer eigenen
+SQLite-Datenbank. Er importiert ausschließlich die 443 Oktober-Aussagen
+und verwendet die alten Ergebnisse als Vergleich. Die aktiven Kundenregeln
+werden vor dem Modell angewendet. Die übrigen Aussagen werden neu kodiert.
+Der neue Regelbestand basiert auf dem Snapshot vom 6. November plus den
+sechs bestätigten Beispieltexten. Eventuelle neuere Web-Regeländerungen
+vor dem Test mit diesem Stand zusammenführen.
+
+Nach Abschluss liegen dort `Oktober 2026 - CSS Test.sav` und
+`comparison.json`. Der Bericht enthält die Prüfung der sechs bestätigten
+Beispiele, alle geänderten Codes/Sentiments und die Aussagen ohne Code.
+Der Gesamtlauf folgt nach der fachlichen Prüfung dieses Oktober-Ergebnisses.
+
 Nach einer Regeländerung im Web unter **Einstellungen → CSS-Textregeln**
 die aktiven Regeln herunterladen und als `D:/AI/Data/CSS/manual-rules.json`
 ablegen. `Start-CSS.cmd` bevorzugt diese Datei und verwendet sonst den
@@ -118,7 +140,7 @@ auswertbare Antwort ein Ergebnis fehlt oder Text oder Score abweichen.
 | --- | --- |
 | `CSS_C01` bis `CSS_C38` | 0 = nicht vergeben, 1 = vergeben |
 | `CSS_S01` bis `CSS_S38` | -1 = negativ, 0 = neutral, 1 = positiv, System-Missing bei unvergebenem Code |
-| `CSS_STATUS` | 0 = keine auswertbare Antwort, 1 = kodiert, 2 = zur Prüfung markiert |
+| `CSS_STATUS` | 0 = keine auswertbare Antwort, 1 = kodiert mit Code, 2 = zur Prüfung markiert, 3 = verarbeitet ohne Code |
 
 Bei nicht auswertbaren Antworten bleiben alle Code- und Sentimentfelder
 System-Missing. Die Werte werden nach dem Schreiben vollständig

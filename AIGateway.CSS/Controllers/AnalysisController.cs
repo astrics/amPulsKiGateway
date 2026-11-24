@@ -264,6 +264,7 @@ public class AnalysisController : ControllerBase
             candidateLimit = _candidateRetriever.ResolveCandidateLimit(request.ProjectId),
             allCandidates = _candidateRetriever.UsesAllCandidates(request.ProjectId),
             customerFeedbackEnabled = prompts.UsesCustomerFeedback(request.ProjectId),
+            customerFeedbackRevision = prompts.UsesCustomerFeedback(request.ProjectId) ? "2026-11-24" : null,
             systemPromptSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(promptBytes)),
             responseTokenLimit = _config.GetValue<int?>("Gateway:ResponseTokenLimits:candidate_rerank"),
             modelName = _config["Gateway:ModelName"],

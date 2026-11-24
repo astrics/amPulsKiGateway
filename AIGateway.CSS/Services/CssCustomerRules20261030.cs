@@ -6,21 +6,31 @@ internal static class CssCustomerRules20261030
 {
     public static string? FollowUpRule(int id) => id switch
     {
+        6 => "Bei blosser Nennung von Preis oder Preis-Leistungs-Verhaeltnis das Sentiment aus KUZU ableiten: 1-4 Negativ, 5-7 Neutral, 8-10 Positiv. Eine ausdrueckliche Preisbewertung hat Vorrang. KUZU bestimmt keine anderen Themen.",
+        9 => "Verstaendlichkeit, Uebersichtlichkeit und Qualitaet des Produktangebots; auch eine Bewertung des Gesamtpakets, etwa 'Fuer unsere Familie aktuell das beste Gesamtpaket' => 9/Positiv.",
+        15 => "Auch unspezifische Zeitbewertungen ohne benannten Vorgang kodieren: 'Schnelligkeit' => 15/Positiv; 'manchmal etwas langatmig' => 15/Negativ. Explizite Rueckerstattungsdauer bleibt bei 19.",
         33 => "Ausdruecklich fehlende oder geringe Erfahrung als eigenen Aspekt kodieren, auch neben einer verwertbaren Bewertung mit Code 32. Ein Wechsel allein belegt noch keine geringe Erfahrung. Ohne eigene Bewertung der Erfahrung ist das Sentiment fuer 33 Neutral.",
-        38 => "Ausdrueckliche allgemeine Bewertung des Kundendiensts kodieren, wenn sie einen eigenen Aspekt bildet. Separat genannte Themen, etwa die App, erhalten daneben ihren eigenen Code.",
+        38 => "Allgemeinen Kundendienst als eigenen Aspekt kodieren, auch bei blosser Nennung und neben getrennten Themen. 'Kundenservice, App' => 38/Neutral und 24/Neutral. Ausdrueckliche Bewertungen bestimmen das jeweilige Sentiment.",
         _ => null
     };
 
     public static string? FollowUpBoundary(int id) => id switch
     {
+        6 => "Bei reiner Preisnennung KUZU fuer das Sentiment nutzen; explizite Wertung hat Vorrang.",
+        9 => "Bewertung des Gesamtpakets ist Code 9; daraus keine weiteren allgemeinen Codes 32 oder 37 ableiten.",
+        15 => "Ein nicht genannter Vorgang schliesst 15 bei ausdruecklicher Zeitbewertung nicht aus. Rueckerstattung ist 19.",
         33 => "Eine vorhandene Bewertung schliesst 33 bei ausdruecklich geringer Erfahrung nicht aus.",
-        38 => "38 bleibt fuer allgemeine Kundenservice-Aussagen reserviert. Einen bereits spezifisch kodierten Serviceaspekt nicht nochmals als 38 kodieren. Eine eigenstaendige allgemeine Servicebewertung kann daneben stehen.",
+        38 => "Eine eigenstaendige allgemeine Kundenservice-Nennung ist auch ohne Wertung 38/Neutral. Einen bereits spezifisch kodierten Serviceaspekt nicht nochmals als 38 kodieren.",
         _ => null
     };
 
     public static void AppendFollowUpInstructions(StringBuilder builder)
     {
         builder.AppendLine("Ergaenzung zur Kundenabstimmung:");
+        builder.AppendLine("- Kundenrueckmeldung 2026-11-24: Reine Preisnennung mit KUZU bewerten (1-4 Negativ, 5-7 Neutral, 8-10 Positiv); explizite Preiswertung hat Vorrang. 'Preis,Leistung' bei KUZU 9 => 6/Positiv; 'Preis-Leistungs-Verhaeltnis, App' bei KUZU 8 => 6/Positiv und 24/Neutral.");
+        builder.AppendLine("- 'Schnelligkeit' => 15/Positiv; 'manchmal etwas langatmig' => 15/Negativ, auch ohne konkret benannten Vorgang.");
+        builder.AppendLine("- 'Fuer unsere Familie aktuell das beste Gesamtpaket.' => 9/Positiv.");
+        builder.AppendLine("- 'Kundenservice, App' => 38/Neutral und 24/Neutral.");
         builder.AppendLine("- Eigenstaendige allgemeine Bewertung des Kundendiensts auch neben getrennten Themen als 38 kodieren, etwa 'Der Kundenservice ist prima. Das Portal ist auch gut' => 38/Positiv und 24/Positiv.");
         builder.AppendLine("- Ausdruecklich geringe Erfahrung auch neben einer Bewertung kodieren, etwa 'Bisher sehr zufrieden, fuer ein Urteil habe ich aber noch zu wenig Erfahrung' => 32/Positiv und 33/Neutral.");
         builder.AppendLine();
