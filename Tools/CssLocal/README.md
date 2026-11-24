@@ -2,7 +2,8 @@
 
 Das Kommandozeilentool verarbeitet SAV-Dateien auf dem KI-Server. Es speichert
 Import und Kodierungen in `D:/AI/Data/CSS/css.sqlite3` und verwendet den
-CSS-Gateway auf demselben Rechner. Das Profil `Gemma4_20Pilot` lauscht nach
+CSS-Gateway auf demselben Rechner. Die API-Modellkennung im Profil und Runner
+lautet `gemma-4-12b-it-qat`. Das Profil `Gemma4_20Pilot` lauscht nach
 dem Neustart zusätzlich auf `127.0.0.1:5000`. LM Studio verwendet weiter
 Gemma 4, Kontext 16384 und eine gleichzeitige Generierung.
 

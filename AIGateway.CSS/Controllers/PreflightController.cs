@@ -27,12 +27,20 @@ public class PreflightController(IHttpClientFactory clients, IConfiguration conf
             if (response.IsSuccessStatusCode)
             {
                 using var models = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-                var loaded = models.RootElement.GetProperty("models").EnumerateArray()
+                var instances = models.RootElement.GetProperty("models").EnumerateArray()
                     .Where(item => item.TryGetProperty("loaded_instances", out _))
                     .SelectMany(item => item.GetProperty("loaded_instances").EnumerateArray())
-                    .Where(item => item.GetProperty("id").GetString() == model).ToList();
+                    .ToList();
+                var loaded = instances.Where(item => item.GetProperty("id").GetString() == model).ToList();
                 if (loaded.Count != 1)
-                    problems.Add("Das konfigurierte Gemma-Modell muss genau einmal geladen sein.");
+                {
+                    var identifiers = instances.Select(item => item.GetProperty("id").GetString()).ToList();
+                    problems.Add("Erwarteter API-Identifier: " + model + ". Geladene API-Identifier: "
+                        + (identifiers.Count == 0 ? "keine" : string.Join(", ", identifiers)) + ".");
+                    problems.Add(loaded.Count == 0
+                        ? "In LM Studio das Gemma-Modell mit dem erwarteten API-Identifier laden; danach erneut starten."
+                        : "Mehrere Instanzen mit derselben Kennung geladen. Eine Instanz beibehalten.");
+                }
                 else
                 {
                     foreach (var property in loaded[0].GetProperty("config").EnumerateObject())
