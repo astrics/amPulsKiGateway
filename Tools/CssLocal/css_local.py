@@ -256,6 +256,34 @@ def lower_keys(value):
     return value
 
 
+def check_preflight(call, required_feedback_revision):
+    print("LM-Studio-Vorgaben: Gemma 4 12B QAT, Kontext 16384, Max Concurrent Predictions 1, "
+          "Thinking AUS (Template: enable_thinking = false), GPU-Offload 48, CPU-Threads 6, "
+          "Eval Batch 2048, Physical Batch 512. Nach Änderung Modell entladen und neu laden.",
+          flush=True)
+    preview = call("/analysis/candidate-preview", {
+        "projectId": 13, "text": "Der Kundenservice war freundlich."
+    })
+    if any(preview.get(key) != value for key, value in PROFILE.items()):
+        raise ValueError("Active gateway is not the expected Gemma4_20Pilot configuration")
+    if required_feedback_revision is not None and preview.get("customerFeedbackRevision") != required_feedback_revision:
+        raise ValueError("Transfer the updated gateway sources and restart Gemma4_20Pilot before this test")
+    try:
+        report = call("/analysis/preflight", {})
+    except HTTPError as error:
+        if error.code == 404:
+            raise ValueError("Gateway-Update mit PreflightController.cs fehlt. Gateway neu bauen und starten.") from error
+        raise
+    for warning in report.get("warnings", []):
+        print("Manuell prüfen: " + warning, flush=True)
+    for name, value in report.get("settings", {}).items():
+        print(f"LM Studio: {name} = {value}", flush=True)
+    if report.get("passed") is not True:
+        raise ValueError("Vorprüfung fehlgeschlagen. Kodierung gestoppt. " + " ".join(report.get("problems", [])))
+    print("Vorprüfung bestanden: Modell antwortet mit JSON ohne Thinking.", flush=True)
+    return preview
+
+
 def classify(db, endpoint, rule_path, limit, prompt_key=False, required_feedback_revision=None):
     pending = db.execute("SELECT * FROM answers WHERE result IS NULL ORDER BY id LIMIT ?", (limit,)).fetchall()
     if not pending:
@@ -278,26 +306,19 @@ def classify(db, endpoint, rule_path, limit, prompt_key=False, required_feedback
         db.execute("INSERT OR REPLACE INTO settings VALUES ('manual rules', ?)", (rule_hash,))
     print(f"Manual rules: {len(rules)} active from {rule_path.name} (SHA-256 {rule_hash})", flush=True)
     dashboard = db.execute("SELECT value FROM settings WHERE name='dashboard'").fetchone()[0]
-    call = None
+    call = gateway_client(endpoint, prompt_key)
+    preview = check_preflight(call, required_feedback_revision)
+    remember(db, "gateway prompt", preview["systemPromptSha256"])
     total = len(pending)
     saved_count = 0
     failures = []
     for index, row in enumerate(pending, 1):
         result = manual_result(rules, row)
         if result is None:
-            if call is None:
-                call = gateway_client(endpoint, prompt_key)
-                preview = call("/analysis/candidate-preview", {
-                    "projectId": 13, "text": "Der Kundenservice war freundlich."
-                })
-                if any(preview.get(key) != value for key, value in PROFILE.items()):
-                    raise ValueError("Active gateway is not the expected Gemma4_20Pilot configuration")
-                if required_feedback_revision is not None and preview.get("customerFeedbackRevision") != required_feedback_revision:
-                    raise ValueError("Transfer the updated gateway sources and restart Gemma4_20Pilot before this test")
-                remember(db, "gateway prompt", preview["systemPromptSha256"])
             try:
                 result = gateway_result(call, row, dashboard)
             except UnusableGatewayResult as error:
+                check_preflight(call, required_feedback_revision)
                 failures.append(str(error))
                 print(f"Fall bleibt offen: {error}", flush=True)
                 continue

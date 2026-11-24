@@ -15,6 +15,15 @@ EXPECTED = {
     926100502: {"15": "Negativ"},
     926100672: {"9": "Positiv"},
     926100623: {"24": "Neutral", "38": "Neutral"},
+    926100049: {"33": "Neutral"},
+    926100142: {"38": "Neutral"},
+    926100255: {"32": "Positiv"},
+    926100354: {"32": "Neutral"},
+    926100370: {"32": "Positiv"},
+    926100383: {"4": "Positiv", "5": "Positiv"},
+    926100513: {"7": "Positiv"},
+    926100524: {"32": "Positiv"},
+    926100630: {"35": "Neutral"},
 }
 
 
@@ -29,11 +38,11 @@ def main():
     source = next((path for path in sources if path.is_file()), None)
     if source is None:
         raise ValueError(f"October original not found in Inbox or _done: {name}")
-    rules = args.data / "manual-rules-20261124.json"
+    rules = args.data / "manual-rules-20261124-v2.json"
     baseline = args.data / "october-results.json"
     if not rules.is_file() or not baseline.is_file():
-        raise ValueError("Place manual-rules-20261124.json and october-results.json in the CSS data directory")
-    root = args.data / "Tests/October-20261124"
+        raise ValueError("Place manual-rules-20261124-v2.json and october-results.json in the CSS data directory")
+    root = args.data / "Tests/October-20261124-v2"
     root.mkdir(parents=True, exist_ok=True)
     with css.locked(root), closing(css.open_db(root)) as db:
         css.remember(db, "test source", css.file_sha256(source))
@@ -71,7 +80,9 @@ def main():
         output = root / "Oktober 2026 - CSS Test.sav"
         if not output.exists():
             css.export_data(db, source, output)
-        print(f"Acceptance: {sum(item['passed'] for item in accepted)}/6; "
+        if len(accepted) != len(EXPECTED):
+            raise ValueError("Expected acceptance cases are missing from the test delivery")
+        print(f"Acceptance: {sum(item['passed'] for item in accepted)}/{len(EXPECTED)}; "
               f"changed: {len(changes)}; without code: {len(no_codes)}")
         print(f"Report: {root / 'comparison.json'}")
 
